@@ -1,6 +1,9 @@
 import os
 from PIL import Image
 from torch.utils import data
+import random
+from torchvision.transforms import RandomHorizontalFlip
+from torchvision.transforms import RandomVerticalFlip
 
 num_classes = 21
 ignore_label = 255
@@ -12,12 +15,14 @@ color map
 12=dog, 13=horse, 14=motorbike, 15=person # 16=potted plant, 17=sheep, 18=sofa, 19=train, 20=tv/monitor
 '''
 
-
-#Feel free to convert this palette to a map
+# Feel free to convert this palette to a map
 palette = [0, 0, 0, 128, 0, 0, 0, 128, 0, 128, 128, 0, 0, 0, 128, 128, 0, 128, 0, 128, 128,
            128, 128, 128, 64, 0, 0, 192, 0, 0, 64, 128, 0, 192, 128, 0, 64, 0, 128, 192, 0, 128,
-           64, 128, 128, 192, 128, 128, 0, 64, 0, 128, 64, 0, 0, 192, 0, 128, 192, 0, 0, 64, 128]  #3 values- R,G,B for every class. First 3 values for class 0, next 3 for
-#class 1 and so on......
+           64, 128, 128, 192, 128, 128, 0, 64, 0, 128, 64, 0, 0, 192, 0, 128, 192, 0, 0, 64,
+           128]  # 3 values- R,G,B for every class. First 3 values for class 0, next 3 for
+
+
+# class 1 and so on......
 
 
 def make_dataset(mode):
@@ -32,14 +37,26 @@ def make_dataset(mode):
             item = (os.path.join(img_path, it + '.jpg'), os.path.join(mask_path, it + '.png'))
             items.append(item)
     elif mode == 'val':
-        #TODO
+        img_path = os.path.join(root, 'VOCdevkit', 'VOC2007', 'JPEGImages')
+        mask_path = os.path.join(root, 'VOCdevkit', 'VOC2007', 'SegmentationClass')
+        data_list = [l.strip('\n') for l in open(os.path.join(
+            root, 'VOCdevkit', 'VOC2007', 'ImageSets', 'Segmentation', 'val.txt')).readlines()]
+        for it in data_list:
+            item = (os.path.join(img_path, it + '.jpg'), os.path.join(mask_path, it + '.png'))
+            items.append(item)
     else:
-        # TODO FOR TEST SET
+        img_path = os.path.join(root, 'VOCdevkit', 'VOC2007', 'JPEGImages')
+        mask_path = os.path.join(root, 'VOCdevkit', 'VOC2007', 'SegmentationClass')
+        data_list = [l.strip('\n') for l in open(os.path.join(
+            root, 'VOCdevkit', 'VOC2007', 'ImageSets', 'Segmentation', 'test.txt')).readlines()]
+        for it in data_list:
+            item = (os.path.join(img_path, it + '.jpg'), os.path.join(mask_path, it + '.png'))
+            items.append(item)
     return items
 
 
 class VOC(data.Dataset):
-    def __init__(self, mode, transform=None, target_transform=None):
+    def __init__(self, mode, transform=None, target_transform=None, random_hor_flip_prob=0., random_vert_flip_prob=0.):
         self.imgs = make_dataset(mode)
         if len(self.imgs) == 0:
             raise RuntimeError('Found 0 images, please check the data set')
@@ -48,6 +65,8 @@ class VOC(data.Dataset):
         self.target_transform = target_transform
         self.width = 224
         self.height = 224
+        self.hor_prob = random_hor_flip_prob
+        self.ver_prob = random_vert_flip_prob
 
     def __getitem__(self, index):
 
@@ -60,7 +79,15 @@ class VOC(data.Dataset):
         if self.target_transform is not None:
             mask = self.target_transform(mask)
 
-        mask[mask==ignore_label]=0
+        # randomly flip the images
+        if random.random() > 1 - self.hor_prob:
+            img = RandomHorizontalFlip(p=1).forward(img)
+            mask = RandomHorizontalFlip(p=1).forward(mask)
+        if random.random() > 1 - self.ver_prob:
+            img = RandomVerticalFlip(p=1).forward(img)
+            mask = RandomVerticalFlip(p=1).forward(mask)
+
+        mask[mask == ignore_label] = 0
 
         return img, mask
 
