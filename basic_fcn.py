@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 
 #ToDO Fill in the __ values
@@ -48,3 +49,36 @@ class FCN(nn.Module):
         score = self.classifier(y5)
 
         return score  # size=(N, n_class, H, W)
+
+
+class DiceLoss(nn.Module):
+    def __init__(self, n_class, weights=None, device='cpu', smooth=1):
+        super(DiceLoss, self).__init__()
+        self.n_class = n_class
+        self.device = device
+        self.smooth = smooth
+        if weights is None:
+            self.weights = torch.ones(self.n_class).to(self.device)
+        else:
+            self.weights = weights
+    def forward(self, input, target):
+        assert input.shape[1] == self.n_class
+        assert len(input.shape) == 4
+        pred = nn.functional.softmax(input, dim=1)
+        target_one_hot = nn.functional.one_hot(target, num_classes=self.n_class).permute(0, 3, 1, 2)
+
+        numerator = 2 * pred * target_one_hot
+        numerator = torch.sum(numerator, dim=3)
+        numerator = torch.sum(numerator, dim=2)
+
+        X_sum = pred * pred
+        X_sum = torch.sum(X_sum, dim=3)
+        X_sum = torch.sum(X_sum, dim=2)
+
+        Y_sum = target_one_hot * target_one_hot
+        Y_sum = torch.sum(Y_sum, dim=3)
+        Y_sum = torch.sum(Y_sum, dim=2)
+
+        dices = 1 - ((numerator + self.smooth) / (X_sum + Y_sum + self.smooth))
+        dices_avg = torch.mean(dices, axis=0)
+        return torch.dot(dices_avg, self.weights) / torch.sum(self.weights)
