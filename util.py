@@ -87,7 +87,7 @@ class DiceLoss(nn.Module):
             if (target == self.ignore_index).sum() > 0:
                 target[target == self.ignore_index] = target.min()
         target = make_one_hot(target.unsqueeze(dim=1), classes=output.size()[1])
-        output = F.softmax(output, dim=1)
+        output = torch.nn.functional.softmax(output, dim=1)
         output_flat = output.contiguous().view(-1)
         target_flat = target.contiguous().view(-1)
         intersection = (output_flat * target_flat).sum()
