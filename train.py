@@ -9,6 +9,8 @@ import util
 import numpy as np
 import argparse
 from copy import deepcopy
+from unet import UNet
+import images
 
 
 class MaskToTensor(object):
@@ -40,7 +42,8 @@ input_transform = standard_transforms.Compose([
 
 target_transform = MaskToTensor()
 
-train_dataset = voc.VOC('train', transform=input_transform, target_transform=target_transform, random_hor_flip_prob=0.5, random_vert_flip_prob=0.5)
+train_dataset = voc.VOC('train', transform=input_transform, target_transform=target_transform, random_hor_flip_prob=0.5,
+                        random_vert_flip_prob=0.5)
 val_dataset = voc.VOC('val', transform=input_transform, target_transform=target_transform)
 test_dataset = voc.VOC('test', transform=input_transform, target_transform=target_transform)
 
@@ -58,21 +61,33 @@ if torch.cuda.is_available():
 else:
     device = 'cpu'
 
-fcn_model = FCN(n_class=n_class).to(device=device)
+fcn_model = UNet(n_class=n_class).to(device=device)
 fcn_model.apply(init_weights)
 
 optimizer = torch.optim.Adam(fcn_model.parameters(), lr=learning_rate)  # TODO choose an optimizer
 scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, epochs)
-criterion = torch.nn.CrossEntropyLoss(weight=getClassWeights(train_dataset, n_classes=n_class, device=device), reduction='mean')  # TODO Choose an appropriate loss function from https://pytorch.org/docs/stable/_modules/torch/nn/modules/loss.html
+criterion = torch.nn.CrossEntropyLoss(weight=getClassWeights(train_dataset, n_classes=n_class, device=device),
+                                      reduction='mean')  # TODO Choose an appropriate loss function from https://pytorch.org/docs/stable/_modules/torch/nn/modules/loss.html
+
+
 # criterion = torch.nn.CrossEntropyLoss()
 
 
 def train(give_time=False):
     best_iou_score = 0.0
     counter = 0
+    train_loss = []
+    val_loss = []
+    train_iou = []
+    val_iou = []
+    train_acc = []
+    val_acc = []
 
     for epoch in range(epochs):
         ts = time.time()
+        epoch_loss = []
+        epoch_iou = []
+        epoch_acc = []
         for iter, (inputs, labels) in enumerate(train_loader):
             # TODO  reset optimizer gradients
             optimizer.zero_grad()
@@ -81,9 +96,15 @@ def train(give_time=False):
             inputs = inputs.to(device=device)  # TODO transfer the input to the same device as the model's
             labels = labels.to(device=device)  # TODO transfer the labels to the same device as the model's
 
-            outputs = fcn_model.forward(inputs)  # TODO  Compute outputs. we will not need to transfer the output, it will be automatically in the same device as the model's!
+            outputs = fcn_model(
+                inputs)  # TODO  Compute outputs. we will not need to transfer the output, it will be automatically in the same device as the model's!
 
             loss = criterion(outputs, labels)  # TODO  calculate loss
+            iou = util.iou(outputs, labels.clone().detach())
+            acc = util.pixel_acc(outputs, labels.clone().detach())
+            epoch_loss.append(loss.item())
+            epoch_iou.append(iou)
+            epoch_acc.append(acc)
 
             # TODO  backpropagate
             loss.backward()
@@ -98,7 +119,13 @@ def train(give_time=False):
         if give_time:
             print("Finish epoch %d\tTime elapsed %.4f seconds" % (epoch, time.time() - ts))
 
-        current_miou_score = val(epoch)
+        current_loss, current_miou_score, current_acc = val(epoch)
+        train_loss.append(np.mean(epoch_loss))
+        train_iou.append(np.mean(epoch_iou))
+        train_acc.append(np.mean(epoch_acc))
+        val_loss.append(current_loss)
+        val_iou.append(current_miou_score)
+        val_acc.append(current_acc)
         scheduler.step()
 
         if current_miou_score > best_iou_score:
@@ -113,7 +140,7 @@ def train(give_time=False):
             print(f'Early stop at epoch {epoch}\tBest epoch: {best_epoch}')
             break
 
-    return best_model
+    return best_model, best_epoch, train_loss, train_iou, train_acc, val_loss, val_iou, val_acc
 
 
 def val(epoch):
@@ -155,13 +182,13 @@ def modelTest():
 
     with torch.no_grad():  # we don't need to calculate the gradient in the validation/testing
 
-        for iter, (input, label) in enumerate(val_loader):
+        for iter, (input, label) in enumerate(test_loader):
             input = input.to(device=device)
             label = label.to(device=device)
 
             output = fcn_model.forward(input)
 
-            losses.append(criterion(output, label).item())
+            losses.append(criterion(output, label.long()).item())
             accuracy.append(util.pixel_acc(output, label))
             mean_iou_scores.append(util.iou(output, label, n_classes=n_class))
 
@@ -179,11 +206,24 @@ if __name__ == "__main__":
     parser.add_argument('--time', action='store_true',
                         help='Print time elapsed per epoch for training')
     args = parser.parse_args()
+
     print(f'Training on {device}')
     print('Format:\t[epoch/total epochs][mini batch/total batches]\tLoss\tIOU\tAccuracy')
+
     val(-1)  # show the accuracy before training
-    fcn_model = train(args.time)
+    fcn_model, best_epoch, train_loss, train_iou, train_acc, val_loss, val_iou, val_acc = train(give_time=False)
     modelTest()
+
+    util.make_plots(train_loss, train_iou, train_acc, val_loss, val_iou, val_acc, best_epoch)
+    images.make_images(fcn_model,
+                       val_dataset,
+                       palette=[0, 0, 0, 128, 0, 0, 0, 128, 0, 128, 128, 0, 0, 0, 128, 128, 0, 128, 0, 128, 128,
+                                128, 128, 128, 64, 0, 0, 192, 0, 0, 64, 128, 0, 192, 128, 0, 64, 0, 128, 192, 0, 128,
+                                64, 128, 128, 192, 128, 128, 0, 64, 0, 128, 64, 0, 0, 192, 0, 128, 192, 0, 0, 64,
+                                128],
+                       index=1,
+                       device=device
+                       )
 
     # housekeeping
     gc.collect()

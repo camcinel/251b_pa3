@@ -2,8 +2,7 @@ import os
 from PIL import Image
 from torch.utils import data
 import random
-from torchvision.transforms import RandomHorizontalFlip
-from torchvision.transforms import RandomVerticalFlip
+import torchvision.transforms.functional as TF
 
 num_classes = 21
 ignore_label = 255
@@ -81,11 +80,11 @@ class VOC(data.Dataset):
 
         # randomly flip the images
         if random.random() > 1 - self.hor_prob:
-            img = RandomHorizontalFlip(p=1).forward(img)
-            mask = RandomHorizontalFlip(p=1).forward(mask)
+            img = TF.hflip(img)
+            mask = TF.hflip(mask)
         if random.random() > 1 - self.ver_prob:
-            img = RandomVerticalFlip(p=1).forward(img)
-            mask = RandomVerticalFlip(p=1).forward(mask)
+            img = TF.vflip(img)
+            mask = TF.vflip(mask)
 
         mask[mask == ignore_label] = 0
 
