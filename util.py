@@ -8,6 +8,22 @@ def iou(pred, target, n_classes=21):
     ious = []
     pred_class = torch.argmax(pred, dim=1)
     target[target == 255] = 0
+    present_classes_per_mask = [torch.unique(mask) for mask in target]
+    for index, class_indices in enumerate(present_classes_per_mask):
+        iou_per_class = []
+        for class_index in class_indices:
+            pred_correct = torch.eq(pred_class[index], class_index)
+            target_correct = torch.eq(target[index], class_index)
+            intersection = (pred_correct & target_correct).sum().item()
+            union = (pred_correct | target_correct).sum().item()
+            iou_per_class.append(intersection / union)
+        ious.append(np.mean(iou_per_class))
+    return np.mean(ious)
+    """
+    Old implementation:
+    
+    pred_class = torch.argmax(pred, dim=1)
+    target[target == 255] = 0
     for index in range(pred.size(0)):
         ious_inst = []
         pred_class_inst = pred_class[index]
@@ -21,6 +37,7 @@ def iou(pred, target, n_classes=21):
                 ious_inst.append(cap.item() / cup.item())
         ious.append(np.mean(ious_inst))
     return np.mean(ious)
+    """
 
 
 def pixel_acc(pred, target):
@@ -126,28 +143,26 @@ class GeneralizedDiceLoss(nn.Module):
 
 
 class FocalLoss(nn.Module):
-    def __init__(self, weight=None, gamma=0, reduction='mean'):
+    def __init__(self, weight=None, gamma=2, reduction='mean'):
         super(FocalLoss, self).__init__()
-        self.weight = weight
+        self.alpha = weight
         self.gamma = gamma
         self.reduction = reduction
 
     def forward(self, input, target):
-        if self.weight is None:
-            self.weight = torch.ones(input.size(1))
-        alpha = self.weight.type_as(input).to(device=input.get_device())
-        target = target.long()
-
         cross_entropy_loss = nn.functional.cross_entropy(input, target, reduction='none')
         pt = torch.exp(-cross_entropy_loss)
-        alpha.div_(alpha.sum())
-        at = alpha.gather(0, target.detach().view(-1)).view(target.shape)
+        loss = (1 - pt).pow(self.gamma) * cross_entropy_loss
 
-        loss = at * (1 - pt).pow(self.gamma) * cross_entropy_loss
+        if self.alpha is not None:
+            alpha = self.alpha.to(device=target.get_device())
+            alpha.div_(alpha.sum())
+            alpha = alpha[target]
+            loss = alpha * loss
 
         if self.reduction == 'mean':
-            loss = loss.mean()
+            return loss.mean()
         elif self.reduction == 'sum':
-            loss = loss.sum()
-
-        return loss
+            return loss.sum()
+        else:
+            return loss

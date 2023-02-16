@@ -55,7 +55,7 @@ def make_dataset(mode):
 
 
 class VOC(data.Dataset):
-    def __init__(self, mode, transform=None, target_transform=None, random_hor_flip_prob=0., random_vert_flip_prob=0.):
+    def __init__(self, mode, transform=None, target_transform=None, random_hor_flip_prob=0., random_vert_flip_prob=0., rotate=False):
         self.imgs = make_dataset(mode)
         if len(self.imgs) == 0:
             raise RuntimeError('Found 0 images, please check the data set')
@@ -66,6 +66,7 @@ class VOC(data.Dataset):
         self.height = 224
         self.hor_prob = random_hor_flip_prob
         self.ver_prob = random_vert_flip_prob
+        self.rotate = rotate
 
     def __getitem__(self, index):
 
@@ -85,6 +86,11 @@ class VOC(data.Dataset):
         if random.random() > 1 - self.ver_prob:
             img = TF.vflip(img)
             mask = TF.vflip(mask)
+
+        if self.rotate:
+            theta = 360. * random.random()
+            img = TF.rotate(img, theta, fill=0)
+            mask = TF.rotate(mask.unsqueeze(0), theta, fill=0).squeeze(0)
 
         mask[mask == ignore_label] = 0
 
