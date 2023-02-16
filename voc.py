@@ -3,6 +3,7 @@ from PIL import Image
 from torch.utils import data
 import random
 import torchvision.transforms.functional as TF
+from torchvision.transforms import RandomCrop
 
 num_classes = 21
 ignore_label = 255
@@ -79,6 +80,14 @@ class VOC(data.Dataset):
         if self.target_transform is not None:
             mask = self.target_transform(mask)
 
+        # randomly crop
+        if self.random_crop:
+            i, j, h, w = RandomCrop.get_params(
+                img, output_size=(224, 224)
+            )
+            img = TF.crop(img, i, j, h, w)
+            mask = TF.crop(mask, i, j, h, w)
+
         # randomly flip the images
         if random.random() > 1 - self.hor_prob:
             img = TF.hflip(img)
@@ -87,6 +96,7 @@ class VOC(data.Dataset):
             img = TF.vflip(img)
             mask = TF.vflip(mask)
 
+        # randomly rotate images
         if self.rotate:
             theta = 360. * random.random()
             img = TF.rotate(img, theta, fill=0)
