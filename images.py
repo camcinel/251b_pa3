@@ -6,7 +6,7 @@ import torchvision.transforms as transforms
 def make_images(model, dataset, palette, index=0, device='cpu'):
     to_image = transforms.ToPILImage()
     palette_tens = torch.tensor(palette).reshape(-1, 3)
-    input, truth = dataset[index][0]
+    input, truth = dataset[index]
     output = model.forward(torch.unsqueeze(input.to(device=device), 0))
     input_image_rgb = input.permute(1, 2, 0)
     truth_image_rgb = palette_tens[truth.to('cpu')]
