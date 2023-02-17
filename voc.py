@@ -56,7 +56,7 @@ def make_dataset(mode):
 
 
 class VOC(data.Dataset):
-    def __init__(self, mode, transform=None, target_transform=None, random_hor_flip_prob=0., random_vert_flip_prob=0., rotate=False):
+    def __init__(self, mode, transform=None, target_transform=None, random_hor_flip_prob=0., random_vert_flip_prob=0., rotate=False, random_crop=False):
         self.imgs = make_dataset(mode)
         if len(self.imgs) == 0:
             raise RuntimeError('Found 0 images, please check the data set')
@@ -68,6 +68,7 @@ class VOC(data.Dataset):
         self.hor_prob = random_hor_flip_prob
         self.ver_prob = random_vert_flip_prob
         self.rotate = rotate
+        self.random_crop = random_crop
 
     def __getitem__(self, index):
 

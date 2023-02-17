@@ -94,52 +94,82 @@ def make_plots(train_loss, train_iou, train_acc, val_loss, val_iou, val_acc, ear
 
 
 class DiceLoss(nn.Module):
-    def __init__(self, smooth=1., ignore_index=255):
+    def __init__(self, n_class, weight=None, smooth=1., reduction='mean'):
         super(DiceLoss, self).__init__()
-        self.ignore_index = ignore_index
+        self.n_class = n_class
+        self.weight = weight
         self.smooth = smooth
+        self.reduction = reduction
 
-    def forward(self, output, target):
-        if self.ignore_index not in range(target.min(), target.max()):
-            if (target == self.ignore_index).sum() > 0:
-                target[target == self.ignore_index] = target.min()
-        target = make_one_hot(target.unsqueeze(dim=1), classes=output.size()[1])
-        output = torch.nn.functional.softmax(output, dim=1)
-        output_flat = output.contiguous().view(-1)
-        target_flat = target.contiguous().view(-1)
-        intersection = (output_flat * target_flat).sum()
-        loss = 1 - ((2. * intersection + self.smooth) /
-                    (output_flat.sum() + target_flat.sum() + self.smooth))
-        return loss
+    def forward(self, input, target):
+        assert input.size(1) == self.n_class
+
+        input = torch.softmax(input, dim=1)
+        input = input.permute(1, 0, 2, 3) # C x N x H x W
+
+        target = nn.functional.one_hot(target, num_classes=self.n_class).permute(3, 0, 1, 2) # C x N x H x W
+
+        input_flat = input.contiguous().view(self.n_class, -1) # C x N*H*W
+        target_flat = target.contiguous().view(self.n_class, -1) # C x N*H*W
+
+        numerator = (input_flat * target_flat).sum(dim=1)
+        denominator = input_flat.sum(dim=1) + target_flat.sum(dim=1)
+
+        dice_scores = (2. * numerator + self.smooth) / (denominator + self.smooth)
+
+        if self.weight is not None:
+            assert self.weight.size(0) == self.n_class
+            assert len(self.weight.shape) == 1
+            class_weights = self.weight.to(device=input.device).type(input.dtype)
+            class_weights.div_(class_weights.sum())
+            dice_scores = class_weights * dice_scores
+
+        loss = 1. - dice_scores
+
+        if self.reduction == 'mean':
+            return loss.mean()
+        elif self.reduction == 'sum':
+            return loss.sum()
+        elif self.reduction == 'none':
+            return loss
+        else:
+            raise NotImplementedError
+
+
 
 
 class GeneralizedDiceLoss(nn.Module):
-    def __init__(self, n_class, device='cpu', epsilon=1e-7):
+    def __init__(self, n_class, epsilon=1e-7):
         super(GeneralizedDiceLoss, self).__init__()
         self.n_class = n_class
-        self.device = device
         self.epsilon = epsilon
 
     def forward(self, input, target):
-        assert input.shape[1] == self.n_class
+        assert input.size(1) == self.n_class
         assert len(input.shape) == 4
-        batch_size = input.size(0)
-        n_class = input.size(1)
-        pred = nn.functional.softmax(input, dim=1)
-        target_one_hot = nn.functional.one_hot(target, num_classes=self.n_class).permute(0, 3, 1, 2).float()
 
-        pred_flat = pred.view(batch_size, n_class, -1)
-        target_one_hot_flat = target_one_hot.view(batch_size, n_class, -1)
+        input = torch.softmax(input, dim=1)
+        input = input.permute(1, 0, 2, 3)  # C x N x H x W
 
-        w = torch.sum(target_one_hot_flat, dim=(0, 2))
-        w = 1 / (w * w).clamp(min=self.epsilon)
+        target = nn.functional.one_hot(target, num_classes=self.n_class).permute(3, 0, 1, 2)  # C x N x H x W
 
-        numerator = torch.dot(w, torch.sum(pred_flat * target_one_hot_flat, dim=(0, 2)))
-        denominator = torch.dot(w, torch.sum(pred_flat + target_one_hot_flat, dim=(0, 2)))
-        dice_score = 2 * (numerator / denominator)
-        loss = 1 - dice_score
+        input_flat = input.contiguous().view(self.n_class, -1)  # C x N*H*W
+        target_flat = target.contiguous().view(self.n_class, -1)  # C x N*H*W
 
-        return loss.mean() / batch_size
+        numerator = (input_flat * target_flat).sum(dim=1)
+        denominator = input_flat.pow(2).sum(dim=1) + target_flat.pow(2).sum(dim=1)
+
+        class_weights = 1. / (torch.sum(target_flat, dim=1).pow(2) + self.epsilon)
+        infs = torch.isinf(class_weights)
+        class_weights[infs] = 0.
+        class_weights = class_weights + infs * torch.max(class_weights)
+
+        dice_score = (2. * torch.dot(class_weights, numerator)) / (torch.dot(class_weights, denominator))
+
+        loss = 1. - dice_score
+
+        return loss
+
 
 
 class FocalLoss(nn.Module):
