@@ -42,13 +42,15 @@ def make_dataset(mode):
 
 
 class VOC(Dataset):
-    def __init__(self, mode, transform=None, target_transform=None):
+    # def __init__(self, mode, transform=None, target_transform=None):
+    def __init__(self, mode, input_transform=None, original_transform=None):
         self.imgs = make_dataset(mode)
         if len(self.imgs) == 0:
             raise RuntimeError('Found 0 images, please check the data set')
         self.mode = mode
-        self.transform = transform
-        self.target_transform = target_transform
+        self.input_transform = input_transform
+        self.original_transform = original_transform
+        
         self.width = 224
         self.height = 224
         self.random_crop = True
@@ -56,41 +58,38 @@ class VOC(Dataset):
 
     def __getitem__(self, index):
 
+        
+        
         img_path, mask_path = self.imgs[index]
         img = Image.open(img_path).convert('RGB').resize((self.width, self.height))
         mask = Image.open(mask_path).resize((self.width, self.height))
         
-        if self.transform is not None:
-            img = self.transform(img)
-        if self.target_transform is not None:
-            mask = self.target_transform(mask)
-        
-        # randomly crop
-        if self.random_crop:
-            i, j, h, w = RandomCrop.get_params(
-                img, output_size=(224, 224)
-            )
-            img = TF.crop(img, i, j, h, w)
-            mask = TF.crop(mask, i, j, h, w)
+        # print(type(img))
 
-        # randomly flip the images
-        if random.random() > 0.5:
-            img = TF.hflip(img)
-            mask = TF.hflip(mask)
-        if random.random() > 0.5:
-            img = TF.vflip(img)
-            mask = TF.vflip(mask)
+        if self.input_transform is not None:
+            img_0 = self.input_transform(img)
+            # img_list.append(self.input_transform(img))
+            mask_0 = self.input_transform(mask)
+            
+        if self.original_transform is not None:
+            img = self.original_transform(img)
+            # img_list.append(self.original_transform(img))
+            mask = self.original_transform(mask)
 
-        # randomly rotate images
-        if self.rotate:
-            theta = 360. * random.random()
-            img = TF.rotate(img, theta, fill=0)
-            mask = TF.rotate(mask.unsqueeze(0), theta, fill=0).squeeze(0)
-        
-        mask[mask == ignore_label] = 0
+        img_list = torch.zeros((2,*(img.shape)))
+        img_list[0] = img
+        img_list[1] = img_0
 
+        mask_list = torch.zeros((2,*(mask.shape)))
+        mask_list[0] = mask
+        mask_list[1] = mask_0
+
+        # print(mask.squeeze().long().shape)
+
+
+        return img_list, mask_list.long()
         # return img, mask.squeeze().long()
-        return img, mask
+
 
     def __len__(self):
         return len(self.imgs)

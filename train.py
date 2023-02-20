@@ -1,4 +1,4 @@
-from basic_fcn import *
+# from basic_fcn import *
 from fcn_4b import *
 import time
 from torch.utils.data import DataLoader
@@ -37,25 +37,32 @@ def getClassWeights(dataset, n_classes=21, device='cpu'):
 
 
 mean_std = ([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-# normalize = standard_transforms.Normalize(*mean_std)
-# normalize_input = standard_transforms.Lambda(lambda x: normalize(x) if x.shape[0] == 3 else x)
-# to_tensor = standard_transforms.Lambda(lambda x: standard_transforms.ToTensor() if x.shape[0] == 3 else MaskToTensor())
-# composed = standard_transforms.Compose([
-#               standard_transforms.RandomCrop(size=(224,224)),
-#               standard_transforms.RandomHorizontalFlip(),
-#               standard_transforms.RandomVerticalFlip(),
-#               standard_transforms.RandomRotation(45)
-# ])
+normalize = standard_transforms.Normalize(*mean_std)
+normalize_input = standard_transforms.Lambda(lambda x: normalize(x) if x.shape[0] == 3 else x)
+# to_tensor = standard_transforms.Lambda(lambda x: standard_transforms.ToTensor(x) if x.shape[0] == 3 else MaskToTensor(x))
+input_composed = standard_transforms.Compose([
+              standard_transforms.RandomCrop(size=(224,224)),
+              standard_transforms.RandomHorizontalFlip(),
+              standard_transforms.RandomVerticalFlip(),
+              standard_transforms.RandomRotation(45),
+              standard_transforms.ToTensor()
+])
 
-input_transform = standard_transforms.Compose([ 
-                    standard_transforms.ToTensor(), 
-                    standard_transforms.Normalize(*mean_std)
-                  ])
-target_transform = MaskToTensor()
+input_transform = standard_transforms.Compose([input_composed, normalize_input])
+original_transform = standard_transforms.Compose([standard_transforms.ToTensor(), normalize_input])
+# input_transform = standard_transforms.Compose([ 
+#                     standard_transforms.ToTensor(), 
+#                     standard_transforms.Normalize(*mean_std)
+#                   ])
+# target_transform = MaskToTensor()
 
-train_dataset = VOC('train', transform=input_transform, target_transform=target_transform)
-val_dataset = VOC('val', transform=input_transform, target_transform=target_transform)
-test_dataset = VOC('test', transform=input_transform, target_transform=target_transform)
+# train_dataset = VOC('train', transform=input_transform, target_transform=target_transform)
+# val_dataset = VOC('val', transform=input_transform, target_transform=target_transform)
+# test_dataset = VOC('test', transform=input_transform, target_transform=target_transform)
+train_dataset = VOC('train', input_transform, original_transform)
+val_dataset = VOC('val', input_transform, original_transform)
+test_dataset = VOC('test', input_transform, original_transform)
+
 
 train_loader = DataLoader(dataset=train_dataset, batch_size=16, shuffle=True)
 val_loader = DataLoader(dataset=val_dataset, batch_size=16, shuffle=False)
@@ -71,7 +78,7 @@ if torch.cuda.is_available():
 else:
     device = 'cpu'
 
-fcn_model = FCN_new(n_class=n_class).to(device=device)
+fcn_model = FCN(n_class=n_class).to(device=device)
 fcn_model.apply(init_weights)
 
 optimizer = torch.optim.Adam(fcn_model.parameters(), lr=learning_rate)  # TODO choose an optimizer
