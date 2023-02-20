@@ -1,11 +1,12 @@
 from basic_fcn import *
+from fcn_4b import *
 import time
 from torch.utils.data import DataLoader
 import torch
 import gc
-import voc
+from voc import VOC
 import torchvision.transforms as standard_transforms
-import util
+from util import *
 import numpy as np
 import argparse
 from copy import deepcopy
@@ -29,39 +30,48 @@ def getClassWeights(dataset, n_classes=21, device='cpu'):
     n_sample = torch.zeros(n_classes).to(device=device)
     total_samples = torch.zeros(1).to(device=device)
     for input, label in dataset:
+        # print((torch.flatten(label.to(device=device))).to(torch.int))
         n_sample += torch.bincount(torch.flatten(label.to(device=device)), minlength=n_classes)
         total_samples += torch.numel(label.to(device=device))
     return total_samples / n_sample
 
 
 mean_std = ([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-input_transform = standard_transforms.Compose([
-    standard_transforms.ToTensor(),
-    standard_transforms.Normalize(*mean_std)
-])
+# normalize = standard_transforms.Normalize(*mean_std)
+# normalize_input = standard_transforms.Lambda(lambda x: normalize(x) if x.shape[0] == 3 else x)
+# to_tensor = standard_transforms.Lambda(lambda x: standard_transforms.ToTensor() if x.shape[0] == 3 else MaskToTensor())
+# composed = standard_transforms.Compose([
+#               standard_transforms.RandomCrop(size=(224,224)),
+#               standard_transforms.RandomHorizontalFlip(),
+#               standard_transforms.RandomVerticalFlip(),
+#               standard_transforms.RandomRotation(45)
+# ])
 
+input_transform = standard_transforms.Compose([ 
+                    standard_transforms.ToTensor(), 
+                    standard_transforms.Normalize(*mean_std)
+                  ])
 target_transform = MaskToTensor()
 
-train_dataset = voc.VOC('train', transform=input_transform, target_transform=target_transform, random_hor_flip_prob=0.5,
-                        random_vert_flip_prob=0.5)
-val_dataset = voc.VOC('val', transform=input_transform, target_transform=target_transform)
-test_dataset = voc.VOC('test', transform=input_transform, target_transform=target_transform)
+train_dataset = VOC('train', transform=input_transform, target_transform=target_transform)
+val_dataset = VOC('val', transform=input_transform, target_transform=target_transform)
+test_dataset = VOC('test', transform=input_transform, target_transform=target_transform)
 
 train_loader = DataLoader(dataset=train_dataset, batch_size=16, shuffle=True)
 val_loader = DataLoader(dataset=val_dataset, batch_size=16, shuffle=False)
 test_loader = DataLoader(dataset=test_dataset, batch_size=16, shuffle=False)
 
 epochs = 100
-learning_rate = 0.01
+learning_rate = 0.0005
 n_class = 21
 patience = 25
 
 if torch.cuda.is_available():
-    device = 'cuda'  # TODO determine which device to use (cuda or cpu)
+    device = 'cuda'  # determine which device to use (cuda or cpu)
 else:
     device = 'cpu'
 
-fcn_model = UNet(n_class=n_class).to(device=device)
+fcn_model = FCN_new(n_class=n_class).to(device=device)
 fcn_model.apply(init_weights)
 
 optimizer = torch.optim.Adam(fcn_model.parameters(), lr=learning_rate)  # TODO choose an optimizer
@@ -69,8 +79,6 @@ scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, epochs)
 criterion = torch.nn.CrossEntropyLoss(weight=getClassWeights(train_dataset, n_classes=n_class, device=device),
                                       reduction='mean')  # TODO Choose an appropriate loss function from https://pytorch.org/docs/stable/_modules/torch/nn/modules/loss.html
 
-
-# criterion = torch.nn.CrossEntropyLoss()
 
 
 def train(give_time=False):
@@ -82,7 +90,7 @@ def train(give_time=False):
     val_iou = []
     train_acc = []
     val_acc = []
-
+    print("start training")
     for epoch in range(epochs):
         ts = time.time()
         epoch_loss = []
@@ -96,14 +104,13 @@ def train(give_time=False):
             inputs = inputs.to(device=device)  # TODO transfer the input to the same device as the model's
             labels = labels.to(device=device)  # TODO transfer the labels to the same device as the model's
 
-            outputs = fcn_model(
-                inputs)  # TODO  Compute outputs. we will not need to transfer the output, it will be automatically in the same device as the model's!
-
+            outputs = fcn_model(inputs)  # TODO  Compute outputs. we will not need to transfer the output, it will be automatically in the same device as the model's!
+            # print(outputs, labels)
             loss = criterion(outputs, labels)  # TODO  calculate loss
-            iou = util.iou(outputs, labels.clone().detach())
-            acc = util.pixel_acc(outputs, labels.clone().detach())
+            iou_ = iou(outputs, labels.clone().detach())
+            acc = pixel_acc(outputs, labels.clone().detach())
             epoch_loss.append(loss.item())
-            epoch_iou.append(iou)
+            epoch_iou.append(iou_)
             epoch_acc.append(acc)
 
             # TODO  backpropagate
@@ -112,10 +119,10 @@ def train(give_time=False):
             # TODO  update the weights
             optimizer.step()
 
-            if iter % 10 == 0:
+            # if iter % 10 == 0:
                 # print("epoch{}, iter{}, loss: {}".format(epoch, iter, loss.item()))
-                print('Train:\t[%d/%d][%d/%d]\tLoss: %.4f' % (epoch, epochs, iter, len(train_loader), loss.item()))
-
+            # print('Train:\t[%d/%d][%d/%d]\tLoss: %.4f' % (epoch, epochs, iter, len(train_loader), loss.item()))
+        
         if give_time:
             print("Finish epoch %d\tTime elapsed %.4f seconds" % (epoch, time.time() - ts))
 
@@ -139,7 +146,10 @@ def train(give_time=False):
         if counter == patience:
             print(f'Early stop at epoch {epoch}\tBest epoch: {best_epoch}')
             break
-
+        # if epoch == give_time:
+        #   break
+        # best_model = deepcopy(fcn_model)
+        # best_epoch = epoch
     return best_model, best_epoch, train_loss, train_iou, train_acc, val_loss, val_iou, val_acc
 
 
@@ -159,8 +169,8 @@ def val(epoch):
             output = fcn_model.forward(input)
 
             losses.append(criterion(output, label).item())
-            accuracy.append(util.pixel_acc(output, label))
-            mean_iou_scores.append(util.iou(output, label, n_classes=n_class))
+            accuracy.append(pixel_acc(output, label))
+            mean_iou_scores.append(iou(output, label, n_classes=n_class))
 
     '''print(f"Loss at epoch: {epoch} is {np.mean(losses)}")
     print(f"IoU at epoch: {epoch} is {np.mean(mean_iou_scores)}")
@@ -170,7 +180,7 @@ def val(epoch):
 
     fcn_model.train()  # TURNING THE TRAIN MODE BACK ON TO ENABLE BATCHNORM/DROPOUT!!
 
-    return np.mean(mean_iou_scores)
+    return np.mean(losses), np.mean(mean_iou_scores), np.mean(accuracy)
 
 
 def modelTest():
@@ -189,8 +199,8 @@ def modelTest():
             output = fcn_model.forward(input)
 
             losses.append(criterion(output, label.long()).item())
-            accuracy.append(util.pixel_acc(output, label))
-            mean_iou_scores.append(util.iou(output, label, n_classes=n_class))
+            accuracy.append(pixel_acc(output, label))
+            mean_iou_scores.append(iou(output, label, n_classes=n_class))
 
     '''print(f"Loss is {np.mean(losses)}")
     print(f"IoU is {np.mean(mean_iou_scores)}")
@@ -202,19 +212,19 @@ def modelTest():
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--time', action='store_true',
-                        help='Print time elapsed per epoch for training')
-    args = parser.parse_args()
+    # parser = argparse.ArgumentParser()
+    # parser.add_argument('--time', action='store_true',
+    #                     help='Print time elapsed per epoch for training')
+    # args = parser.parse_args()
 
     print(f'Training on {device}')
     print('Format:\t[epoch/total epochs][mini batch/total batches]\tLoss\tIOU\tAccuracy')
 
-    val(-1)  # show the accuracy before training
-    fcn_model, best_epoch, train_loss, train_iou, train_acc, val_loss, val_iou, val_acc = train(give_time=False)
+    # val(-1)  # show the accuracy before training
+    fcn_model, best_epoch, train_loss, train_iou, train_acc, val_loss, val_iou, val_acc = train(give_time=25)
     modelTest()
 
-    util.make_plots(train_loss, train_iou, train_acc, val_loss, val_iou, val_acc, best_epoch)
+    make_plots(train_loss, train_iou, train_acc, val_loss, val_iou, val_acc, best_epoch)
     images.make_images(fcn_model,
                        val_dataset,
                        palette=[0, 0, 0, 128, 0, 0, 0, 128, 0, 128, 128, 0, 0, 0, 128, 128, 0, 128, 0, 128, 128,

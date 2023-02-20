@@ -2,7 +2,21 @@ import numpy as np
 import torch
 import matplotlib.pyplot as plt
 import torch.nn as nn
+import yaml
 
+# root = '/content/drive/MyDrive/251b_pa3/data/'
+root ='/content/drive/MyDrive/Study Material/Qtr 5/251b_pa3/data/'
+
+def load_config(path):
+    """
+    Loads the config yaml from the specified path
+
+    args:
+        path - Complete path of the config yaml file to be loaded
+    returns:
+        yaml - yaml object containing the config file
+    """
+    return yaml.load(open(path, 'r'), Loader=yaml.SafeLoader)
 
 def iou(pred, target, n_classes=21):
     ious = []
@@ -19,6 +33,7 @@ def iou(pred, target, n_classes=21):
             iou_per_class.append(intersection / union)
         ious.append(np.mean(iou_per_class))
     return np.mean(ious)
+
     """
     Old implementation:
     
@@ -54,7 +69,7 @@ def make_one_hot(labels, classes):
 
 
 def make_plots(train_loss, train_iou, train_acc, val_loss, val_iou, val_acc, early_stop):
-    fig = plt.figure(figsize=(60, 90))
+    fig = plt.figure(figsize=(16, 10))
     epochs = np.arange(1, len(train_loss) + 1, 1)
 
     ax1 = fig.add_subplot(3, 1, 1)
@@ -89,7 +104,7 @@ def make_plots(train_loss, train_iou, train_acc, val_loss, val_iou, val_acc, ear
     ax3.set_xlabel('Epochs', fontsize=35.0)
     ax3.set_ylabel('Accuracy', fontsize=35.0)
     ax3.legend(loc="lower right", fontsize=35.0)
-
+    plt.savefig(root[:-5]+'my_plot.png')
     plt.show()
 
 

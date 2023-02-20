@@ -1,13 +1,14 @@
 import os
 from PIL import Image
-from torch.utils import data
+from torch.utils.data import Dataset
 import random
 import torchvision.transforms.functional as TF
 from torchvision.transforms import RandomCrop
+from util import *
 
 num_classes = 21
 ignore_label = 255
-root = './data'
+# root = './data'
 
 '''
 color map
@@ -28,35 +29,20 @@ palette = [0, 0, 0, 128, 0, 0, 0, 128, 0, 128, 128, 0, 0, 0, 128, 128, 0, 128, 0
 def make_dataset(mode):
     assert mode in ['train', 'val', 'test']
     items = []
-    if mode == 'train':
-        img_path = os.path.join(root, 'VOCdevkit', 'VOC2007', 'JPEGImages')
-        mask_path = os.path.join(root, 'VOCdevkit', 'VOC2007', 'SegmentationClass')
-        data_list = [l.strip('\n') for l in open(os.path.join(
-            root, 'VOCdevkit', 'VOC2007', 'ImageSets', 'Segmentation', 'train.txt')).readlines()]
-        for it in data_list:
-            item = (os.path.join(img_path, it + '.jpg'), os.path.join(mask_path, it + '.png'))
-            items.append(item)
-    elif mode == 'val':
-        img_path = os.path.join(root, 'VOCdevkit', 'VOC2007', 'JPEGImages')
-        mask_path = os.path.join(root, 'VOCdevkit', 'VOC2007', 'SegmentationClass')
-        data_list = [l.strip('\n') for l in open(os.path.join(
-            root, 'VOCdevkit', 'VOC2007', 'ImageSets', 'Segmentation', 'val.txt')).readlines()]
-        for it in data_list:
-            item = (os.path.join(img_path, it + '.jpg'), os.path.join(mask_path, it + '.png'))
-            items.append(item)
-    else:
-        img_path = os.path.join(root, 'VOCdevkit', 'VOC2007', 'JPEGImages')
-        mask_path = os.path.join(root, 'VOCdevkit', 'VOC2007', 'SegmentationClass')
-        data_list = [l.strip('\n') for l in open(os.path.join(
-            root, 'VOCdevkit', 'VOC2007', 'ImageSets', 'Segmentation', 'test.txt')).readlines()]
-        for it in data_list:
-            item = (os.path.join(img_path, it + '.jpg'), os.path.join(mask_path, it + '.png'))
-            items.append(item)
+    
+    img_path = os.path.join(root, 'VOCdevkit', 'VOC2007', 'JPEGImages')
+    mask_path = os.path.join(root, 'VOCdevkit', 'VOC2007', 'SegmentationClass')
+    data_list = [l.strip('\n') for l in open(os.path.join(
+        root, 'VOCdevkit', 'VOC2007', 'ImageSets', 'Segmentation', mode+'.txt')).readlines()]
+    for it in data_list:
+        item = (os.path.join(img_path, it + '.jpg'), os.path.join(mask_path, it + '.png'))
+        items.append(item)
+
     return items
 
 
-class VOC(data.Dataset):
-    def __init__(self, mode, transform=None, target_transform=None, random_hor_flip_prob=0., random_vert_flip_prob=0., rotate=False, random_crop=False):
+class VOC(Dataset):
+    def __init__(self, mode, transform=None, target_transform=None):
         self.imgs = make_dataset(mode)
         if len(self.imgs) == 0:
             raise RuntimeError('Found 0 images, please check the data set')
@@ -65,22 +51,20 @@ class VOC(data.Dataset):
         self.target_transform = target_transform
         self.width = 224
         self.height = 224
-        self.hor_prob = random_hor_flip_prob
-        self.ver_prob = random_vert_flip_prob
-        self.rotate = rotate
-        self.random_crop = random_crop
+        self.random_crop = True
+        self.rotate = True
 
     def __getitem__(self, index):
 
         img_path, mask_path = self.imgs[index]
         img = Image.open(img_path).convert('RGB').resize((self.width, self.height))
         mask = Image.open(mask_path).resize((self.width, self.height))
-
+        
         if self.transform is not None:
             img = self.transform(img)
         if self.target_transform is not None:
             mask = self.target_transform(mask)
-
+        
         # randomly crop
         if self.random_crop:
             i, j, h, w = RandomCrop.get_params(
@@ -90,10 +74,10 @@ class VOC(data.Dataset):
             mask = TF.crop(mask, i, j, h, w)
 
         # randomly flip the images
-        if random.random() > 1 - self.hor_prob:
+        if random.random() > 0.5:
             img = TF.hflip(img)
             mask = TF.hflip(mask)
-        if random.random() > 1 - self.ver_prob:
+        if random.random() > 0.5:
             img = TF.vflip(img)
             mask = TF.vflip(mask)
 
@@ -102,9 +86,10 @@ class VOC(data.Dataset):
             theta = 360. * random.random()
             img = TF.rotate(img, theta, fill=0)
             mask = TF.rotate(mask.unsqueeze(0), theta, fill=0).squeeze(0)
-
+        
         mask[mask == ignore_label] = 0
 
+        # return img, mask.squeeze().long()
         return img, mask
 
     def __len__(self):
