@@ -4,8 +4,9 @@ import matplotlib.pyplot as plt
 import torch.nn as nn
 import yaml
 
-root = '/content/drive/MyDrive/251b_pa3/data/'
+#root = '/content/drive/MyDrive/251b_pa3/data/'
 # root ='/content/drive/MyDrive/Study Material/Qtr 5/251b_pa3/data/'
+root = './data/'
 
 def load_config(path):
     """

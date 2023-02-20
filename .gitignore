@@ -1,2 +1,6 @@
+.idea/
+.gitignore~
+..gitignore.un~
+__pycache__/
 data/
 .DS_Store

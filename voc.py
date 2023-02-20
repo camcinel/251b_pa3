@@ -3,6 +3,7 @@ from PIL import Image
 from torch.utils.data import Dataset
 import random
 import torchvision.transforms.functional as TF
+import torchvision.transforms as T
 from torchvision.transforms import RandomCrop
 from util import *
 
@@ -43,13 +44,13 @@ def make_dataset(mode):
 
 class VOC(Dataset):
     # def __init__(self, mode, transform=None, target_transform=None):
-    def __init__(self, mode, input_transform=None, original_transform=None):
+    def __init__(self, mode, input_transform=None):
         self.imgs = make_dataset(mode)
         if len(self.imgs) == 0:
             raise RuntimeError('Found 0 images, please check the data set')
         self.mode = mode
         self.input_transform = input_transform
-        self.original_transform = original_transform
+        #self.original_transform = original_transform
         
         self.width = 224
         self.height = 224
@@ -61,14 +62,19 @@ class VOC(Dataset):
         img_path, mask_path = self.imgs[index]
         img = Image.open(img_path).convert('RGB').resize((self.width, self.height))
         mask = Image.open(mask_path).resize((self.width, self.height))
-        
-        # print(type(img))
 
+        # tr = random.choice(self.input_transform)
+        seed = np.random.randint(2147483647) # make a seed with numpy generator 
+        random.seed(seed)
+        
         if self.input_transform is not None:
+            torch.manual_seed(seed)
             img_0 = self.input_transform(img)
+            torch.manual_seed(seed)
             mask_0 = self.input_transform(mask)
             
         return img_0, mask_0.squeeze().long()
+        # return img, mask.squeeze().long()
 
 
     def __len__(self):

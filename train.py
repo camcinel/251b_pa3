@@ -42,14 +42,14 @@ normalize_input = standard_transforms.Lambda(lambda x: normalize(x) if x.shape[0
 # to_tensor = standard_transforms.Lambda(lambda x: standard_transforms.ToTensor(x) if x.shape[0] == 3 else MaskToTensor(x))
 input_composed = standard_transforms.Compose([
               standard_transforms.RandomCrop(size=(224,224)),
-              standard_transforms.RandomHorizontalFlip(),
-              standard_transforms.RandomVerticalFlip(),
+              standard_transforms.RandomHorizontalFlip(0.5),
+              standard_transforms.RandomVerticalFlip(0.5),
               standard_transforms.RandomRotation(45),
               standard_transforms.ToTensor()
 ])
 
 input_transform = standard_transforms.Compose([input_composed, normalize_input])
-original_transform = standard_transforms.Compose([standard_transforms.ToTensor(), normalize_input])
+#original_transform = standard_transforms.Compose([standard_transforms.ToTensor(), normalize_input])
 # input_transform = standard_transforms.Compose([ 
 #                     standard_transforms.ToTensor(), 
 #                     standard_transforms.Normalize(*mean_std)
@@ -59,10 +59,12 @@ original_transform = standard_transforms.Compose([standard_transforms.ToTensor()
 # train_dataset = VOC('train', transform=input_transform, target_transform=target_transform)
 # val_dataset = VOC('val', transform=input_transform, target_transform=target_transform)
 # test_dataset = VOC('test', transform=input_transform, target_transform=target_transform)
-train_dataset = VOC('train', input_transform, original_transform)
-val_dataset = VOC('val', input_transform, original_transform)
-test_dataset = VOC('test', input_transform, original_transform)
-
+train_dataset = VOC('train', input_transform)
+val_dataset = VOC('val', input_transform)
+test_dataset = VOC('test', input_transform)
+# train_dataset = VOC('train')
+# val_dataset = VOC('val')
+# test_dataset = VOC('test')
 
 train_loader = DataLoader(dataset=train_dataset, batch_size=16, shuffle=True)
 val_loader = DataLoader(dataset=val_dataset, batch_size=16, shuffle=False)
@@ -110,7 +112,16 @@ def train(give_time=False):
             # both inputs and labels have to reside in the same device as the model's
             inputs = inputs.to(device=device)  # TODO transfer the input to the same device as the model's
             labels = labels.to(device=device)  # TODO transfer the labels to the same device as the model's
-
+            # img_arr = inputs.clone().cpu()[0].numpy().T
+            # plt.imshow(img_arr)
+            # plt.show()
+            
+            # label_arr = labels.clone().cpu()[0].numpy().T
+            # plt.imshow(label_arr)
+            # plt.show()
+            #plt.imshow(inputs.clone().cpu()[0].T)
+            #print(inputs.clone()[0])
+            # break
             outputs = fcn_model(inputs)  # TODO  Compute outputs. we will not need to transfer the output, it will be automatically in the same device as the model's!
             # print(outputs, labels)
             loss = criterion(outputs, labels)  # TODO  calculate loss
