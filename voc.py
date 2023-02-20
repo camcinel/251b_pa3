@@ -58,8 +58,6 @@ class VOC(Dataset):
 
     def __getitem__(self, index):
 
-        
-        
         img_path, mask_path = self.imgs[index]
         img = Image.open(img_path).convert('RGB').resize((self.width, self.height))
         mask = Image.open(mask_path).resize((self.width, self.height))
@@ -68,27 +66,9 @@ class VOC(Dataset):
 
         if self.input_transform is not None:
             img_0 = self.input_transform(img)
-            # img_list.append(self.input_transform(img))
             mask_0 = self.input_transform(mask)
             
-        if self.original_transform is not None:
-            img = self.original_transform(img)
-            # img_list.append(self.original_transform(img))
-            mask = self.original_transform(mask)
-
-        img_list = torch.zeros((2,*(img.shape)))
-        img_list[0] = img
-        img_list[1] = img_0
-
-        mask_list = torch.zeros((2,*(mask.shape)))
-        mask_list[0] = mask
-        mask_list[1] = mask_0
-
-        # print(mask.squeeze().long().shape)
-
-
-        return img_list, mask_list.long()
-        # return img, mask.squeeze().long()
+        return img_0, mask_0.squeeze().long()
 
 
     def __len__(self):
