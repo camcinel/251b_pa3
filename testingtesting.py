@@ -1,7 +1,7 @@
 import torch
 import gc
 import cv2
-from util import *
+from utils.util import *
 import os
 from PIL import Image
 

@@ -8,6 +8,21 @@ import yaml
 # root ='/content/drive/MyDrive/Study Material/Qtr 5/251b_pa3/data/'
 root = './data/'
 
+def plotImageMask(input, label):
+    """
+    Plot augmented training image and its mask in a figure.
+    INPUT: Image and mask tensors
+    """
+    # Plot random transformaed dimage and mask
+    input = np.transpose(input, (1,2,0))
+    fig, (ax1, ax2) = plt.subplots(1,2)
+    fig.suptitle('Transformed training dataset')
+    ax1.imshow(input)
+    ax1.set_title('Image')
+    ax2.imshow(label)
+    ax2.set_title('Mask')
+    plt.show()
+
 def load_config(path):
     """
     Loads the config yaml from the specified path

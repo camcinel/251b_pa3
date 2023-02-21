@@ -1,11 +1,8 @@
 import os
 from PIL import Image
 from torch.utils.data import Dataset
-import random
-import torchvision.transforms.functional as TF
-import torchvision.transforms as T
-from torchvision.transforms import RandomCrop
-from util import *
+import torchvision.transforms as standard_transforms
+from utils.util import *
 
 num_classes = 21
 ignore_label = 255
@@ -50,11 +47,11 @@ class VOC(Dataset):
         self.mode = mode
         self.input_transform = input_transform
         self.target_transform = target_transform
-        self.rand_transform = T.Compose([
-                        T.RandomCrop(size=(224,224)),
-                        T.RandomHorizontalFlip(0.5),
-                        T.RandomVerticalFlip(0.2),
-                        T.RandomRotation(20)
+        self.rand_transform = standard_transforms.Compose([
+                        standard_transforms.RandomCrop(size=(224,224)),
+                        standard_transforms.RandomHorizontalFlip(0.5),
+                        standard_transforms.RandomVerticalFlip(0.2),
+                        standard_transforms.RandomRotation(20)
                         ])
         
         self.width = 224
@@ -75,6 +72,7 @@ class VOC(Dataset):
             torch.manual_seed(seed)
             mask = self.rand_transform(mask)
 
+        # Input and traget transforms (Normalize/ToTensor)
         if self.input_transform is not None:
             img = self.input_transform(img)
         if self.target_transform is not None:

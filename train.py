@@ -1,18 +1,17 @@
-from basic_fcn import FCN
-from skip_fcn import skipFCN
-from fcn_4b import modFCN
+from models.basic_fcn import FCN
+from models.skip_fcn import skipFCN
+from models.fcn_4b import modFCN
+from models.unet import UNet
+from voc import VOC
 import time
 from torch.utils.data import DataLoader
 import torch
 import gc
-from voc import VOC
 import torchvision.transforms as standard_transforms
-from util import *
+from utils.util import *
 import numpy as np
-import argparse
 from copy import deepcopy
-from unet import UNet
-import images
+import utils.images as images
 
 
 class MaskToTensor(object):
@@ -61,15 +60,18 @@ n_class = 21
 patience = 25
 L2 = 0.01
 
-if torch.cuda.is_available():
-    device = 'cuda'  # determine which device to use (cuda or cpu)
-else:
-    device = 'cpu'
+# determine which device to use (cuda or cpu)
+device  = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
 # Select from available models
-models = [FCN, modFCN, skipFCN]
-model = models[2]
+models = {
+    'FCN': FCN, 
+    'modFCN': modFCN, 
+    'skipFCN': skipFCN, 
+    'UNet': UNet
+    }
+model = models['skipFCN']
 fcn_model = model(n_class=n_class).to(device=device)
 fcn_model.apply(init_weights)
 
@@ -103,15 +105,8 @@ def train(give_time=False):
             inputs = inputs.to(device=device)  # TODO transfer the input to the same device as the model's
             labels = labels.to(device=device)  # TODO transfer the labels to the same device as the model's
             
-            # Plot random transformaed dimage and mask
-            # img_arr = inputs[0].clone().cpu().numpy()
-            # img_arr = np.transpose(img_arr, (1,2,0))
-            # label_arr = labels[0].clone().cpu().numpy()
-            # fig, (ax1, ax2) = plt.subplots(1,2)
-            # ax1.imshow(img_arr)
-            # ax2.imshow(label_arr)
-            # plt.show()
-            # break
+            plotImageMask(inputs[0].clone().cpu().numpy(), labels[0].clone().cpu().numpy())
+
             outputs = fcn_model(inputs)  # TODO  Compute outputs. we will not need to transfer the output, it will be automatically in the same device as the model's!
             # print(outputs, labels)
             loss = criterion(outputs, labels)  # TODO  calculate loss
