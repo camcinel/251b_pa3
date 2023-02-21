@@ -5,39 +5,16 @@ import torch.nn as nn
 
 
 def iou(pred, target, n_classes=21):
-    ious = []
+    intersections = []
+    unions = []
     pred_class = torch.argmax(pred, dim=1)
     target[target == 255] = 0
-    present_classes_per_mask = [torch.unique(mask) for mask in target]
-    for index, class_indices in enumerate(present_classes_per_mask):
-        iou_per_class = []
-        for class_index in class_indices:
-            pred_correct = torch.eq(pred_class[index], class_index)
-            target_correct = torch.eq(target[index], class_index)
-            intersection = (pred_correct & target_correct).sum().item()
-            union = (pred_correct | target_correct).sum().item()
-            iou_per_class.append(intersection / union)
-        ious.append(np.mean(iou_per_class))
-    return np.mean(ious)
-    """
-    Old implementation:
-    
-    pred_class = torch.argmax(pred, dim=1)
-    target[target == 255] = 0
-    for index in range(pred.size(0)):
-        ious_inst = []
-        pred_class_inst = pred_class[index]
-        target_inst = target[index]
-        for i in range(n_classes):
-            pred_class_positive = (pred_class_inst == i)  # torch.from_numpy(pred_class == i).to(device=device)
-            target_positive = (target_inst == i)  # torch.from_numpy(target == i).to(device=device)
-            if torch.any(target_positive):
-                cap = torch.sum(pred_class_positive * target_positive)
-                cup = torch.sum(pred_class_positive + target_positive)
-                ious_inst.append(cap.item() / cup.item())
-        ious.append(np.mean(ious_inst))
-    return np.mean(ious)
-    """
+    for index in range(n_classes):
+        pred_index = torch.eq(pred_class, index)
+        target_index = torch.eq(target, index)
+        intersections.append((pred_index & target_index).sum().item())
+        unions.append((pred_index | target_index).sum().item())
+    return np.array(intersections), np.array(unions)
 
 
 def pixel_acc(pred, target):
@@ -105,12 +82,12 @@ class DiceLoss(nn.Module):
         assert input.size(1) == self.n_class
 
         input = torch.softmax(input, dim=1)
-        input = input.permute(1, 0, 2, 3) # C x N x H x W
+        input = input.permute(1, 0, 2, 3)  # C x N x H x W
 
-        target = nn.functional.one_hot(target, num_classes=self.n_class).permute(3, 0, 1, 2) # C x N x H x W
+        target = nn.functional.one_hot(target, num_classes=self.n_class).permute(3, 0, 1, 2)  # C x N x H x W
 
-        input_flat = input.contiguous().view(self.n_class, -1) # C x N*H*W
-        target_flat = target.contiguous().view(self.n_class, -1) # C x N*H*W
+        input_flat = input.contiguous().view(self.n_class, -1)  # C x N*H*W
+        target_flat = target.contiguous().view(self.n_class, -1)  # C x N*H*W
 
         numerator = (input_flat * target_flat).sum(dim=1)
         denominator = input_flat.sum(dim=1) + target_flat.sum(dim=1)
@@ -134,8 +111,6 @@ class DiceLoss(nn.Module):
             return loss
         else:
             raise NotImplementedError
-
-
 
 
 class GeneralizedDiceLoss(nn.Module):
@@ -171,7 +146,6 @@ class GeneralizedDiceLoss(nn.Module):
         return loss
 
 
-
 class FocalLoss(nn.Module):
     def __init__(self, weight=None, gamma=2, reduction='mean'):
         super(FocalLoss, self).__init__()
@@ -196,3 +170,93 @@ class FocalLoss(nn.Module):
             return loss.sum()
         else:
             return loss
+
+
+class FocalDiceLoss(nn.Module):
+    def __init__(self, n_class, weight=None, smooth=1., gamma=1, reduction='mean'):
+        super(FocalDiceLoss, self).__init__()
+        self.n_class = n_class
+        self.weight = weight
+        self.smooth = smooth
+        self.gamma = gamma
+        self.reduction = reduction
+
+    def forward(self, input, target):
+        assert input.size(1) == self.n_class
+
+        input = torch.softmax(input, dim=1)
+        input = input.permute(1, 0, 2, 3)  # C x N x H x W
+
+        target = nn.functional.one_hot(target, num_classes=self.n_class).permute(3, 0, 1, 2)  # C x N x H x W
+
+        input_flat = input.contiguous().view(self.n_class, -1)  # C x N*H*W
+        target_flat = target.contiguous().view(self.n_class, -1)  # C x N*H*W
+
+        numerator = ((1 - input_flat).pow(self.gamma) * input_flat * target_flat).sum(dim=1)
+        denominator = ((1 - input_flat).pow(self.gamma) * input_flat).sum(dim=1) + target_flat.sum(dim=1)
+
+        dice_scores = (2. * numerator + self.smooth) / (denominator + self.smooth)
+
+        if self.weight is not None:
+            assert self.weight.size(0) == self.n_class
+            assert len(self.weight.shape) == 1
+            class_weights = self.weight.to(device=input.device).type(input.dtype)
+            class_weights.div_(class_weights.sum())
+            dice_scores = class_weights * dice_scores
+
+        loss = 1. - dice_scores
+
+        if self.reduction == 'mean':
+            return loss.mean()
+        elif self.reduction == 'sum':
+            return loss.sum()
+        elif self.reduction == 'none':
+            return loss
+        else:
+            raise NotImplementedError
+
+
+class FocalLoss2(nn.Module):
+    def __init__(self, alpha=None, gamma=0., reduction='mean', ignore_index=-100):
+
+        super(FocalLoss2, self).__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.ignore_index = ignore_index
+        self.reduction = reduction
+
+        self.nll_loss = nn.NLLLoss(
+            weight=alpha, reduction='none', ignore_index=ignore_index)
+
+    def forward(self, input, target):
+        if input.ndim > 2:
+            # (N, C, d1, d2, ..., dK) --> (N * d1 * ... * dK, C)
+            c = input.shape[1]
+            input = input.permute(0, *range(2, input.ndim), 1).reshape(-1, c)
+            # (N, d1, d2, ..., dK) --> (N * d1 * ... * dK,)
+            target = target.view(-1)
+
+        # compute weighted cross entropy term: -alpha * log(pt)
+        # (alpha is already part of self.nll_loss)
+        log_p = nn.functional.log_softmax(input, dim=-1)
+        cross_entropy = self.nll_loss(log_p, target)
+
+        # get true class column from each row
+        all_rows = torch.arange(len(input))
+        log_pt = log_p[all_rows, target]
+
+        # compute focal term: (1 - pt)^gamma
+        pt = log_pt.exp()
+        focal_term = (1 - pt).pow( self.gamma)
+
+        # the full loss: -alpha * ((1 - pt)^gamma) * log(pt)
+        loss = focal_term * cross_entropy
+
+        if self.reduction == 'mean':
+            loss = loss.mean()
+            if self.alpha is not None:
+                loss = loss / self.alpha.sum()
+        elif self.reduction == 'sum':
+            loss = loss.sum()
+
+        return loss

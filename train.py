@@ -24,7 +24,7 @@ def init_weights(m):
         torch.nn.init.normal_(m.bias.data)  # xavier not applicable for biases
 
 
-# TODO Get class weights
+# Get class weights
 def getClassWeights(dataset, n_classes=21, device='cpu'):
     n_sample = torch.zeros(n_classes).to(device=device)
     total_samples = torch.zeros(1).to(device=device)
@@ -57,24 +57,24 @@ n_class = 21
 patience = 25
 
 if torch.cuda.is_available():
-    device = 'cuda'  # TODO determine which device to use (cuda or cpu)
+    device = 'cuda'
 else:
     device = 'cpu'
 
 fcn_model = UNet(n_class=n_class).to(device=device)
 fcn_model.apply(init_weights)
 
-optimizer = torch.optim.Adam(fcn_model.parameters(), lr=learning_rate)  # TODO choose an optimizer
+optimizer = torch.optim.Adam(fcn_model.parameters(), lr=learning_rate)
 scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, epochs)
 criterion = torch.nn.CrossEntropyLoss(weight=getClassWeights(train_dataset, n_classes=n_class, device=device),
-                                      reduction='mean')  # TODO Choose an appropriate loss function from https://pytorch.org/docs/stable/_modules/torch/nn/modules/loss.html
+                                      reduction='mean')
 
 
 # criterion = torch.nn.CrossEntropyLoss()
 
 
 def train(give_time=False):
-    best_iou_score = 0.0
+    best_loss = np.inf
     counter = 0
     train_loss = []
     val_loss = []
@@ -86,30 +86,32 @@ def train(give_time=False):
     for epoch in range(epochs):
         ts = time.time()
         epoch_loss = []
-        epoch_iou = []
         epoch_acc = []
+        intersection = np.zeros(n_class)
+        union = np.zeros(n_class)
         for iter, (inputs, labels) in enumerate(train_loader):
-            # TODO  reset optimizer gradients
+            # reset optimizer gradients
             optimizer.zero_grad()
 
             # both inputs and labels have to reside in the same device as the model's
-            inputs = inputs.to(device=device)  # TODO transfer the input to the same device as the model's
-            labels = labels.to(device=device)  # TODO transfer the labels to the same device as the model's
+            inputs = inputs.to(device=device)  # transfer the input to the same device as the model's
+            labels = labels.to(device=device)  # transfer the labels to the same device as the model's
 
             outputs = fcn_model(
-                inputs)  # TODO  Compute outputs. we will not need to transfer the output, it will be automatically in the same device as the model's!
+                inputs)  # Compute outputs
 
-            loss = criterion(outputs, labels)  # TODO  calculate loss
-            iou = util.iou(outputs, labels.clone().detach())
+            loss = criterion(outputs, labels)  # calculate loss
+            batch_intersection, batch_union = util.iou(outputs, labels.clone().detach())
+            intersection += batch_intersection
+            union += batch_union
             acc = util.pixel_acc(outputs, labels.clone().detach())
             epoch_loss.append(loss.item())
-            epoch_iou.append(iou)
             epoch_acc.append(acc)
 
-            # TODO  backpropagate
+            # backpropagate
             loss.backward()
 
-            # TODO  update the weights
+            # update the weights
             optimizer.step()
 
             if iter % 10 == 0:
@@ -120,21 +122,24 @@ def train(give_time=False):
             print("Finish epoch %d\tTime elapsed %.4f seconds" % (epoch, time.time() - ts))
 
         current_loss, current_miou_score, current_acc = val(epoch)
+
+        train_mean_iou = intersection / union
+
         train_loss.append(np.mean(epoch_loss))
-        train_iou.append(np.mean(epoch_iou))
+        train_iou.append(np.mean(train_mean_iou))
         train_acc.append(np.mean(epoch_acc))
         val_loss.append(current_loss)
         val_iou.append(current_miou_score)
         val_acc.append(current_acc)
         scheduler.step()
 
-        if current_miou_score > best_iou_score:
-            best_iou_score = current_miou_score
+        if current_loss < best_loss:
+            best_loss = current_loss
             best_model = deepcopy(fcn_model)
             best_epoch = epoch
             counter = 0
             # save the best model
-        elif current_miou_score < best_iou_score:
+        elif current_loss > best_loss:
             counter += 1
         if counter == patience:
             print(f'Early stop at epoch {epoch}\tBest epoch: {best_epoch}')
@@ -147,8 +152,9 @@ def val(epoch):
     fcn_model.eval()  # Put in eval mode (disables batchnorm/dropout) !
 
     losses = []
-    mean_iou_scores = []
     accuracy = []
+    intersection = np.zeros(n_class)
+    union = np.zeros(n_class)
 
     with torch.no_grad():  # we don't need to calculate the gradient in the validation/testing
 
@@ -156,46 +162,47 @@ def val(epoch):
             input = input.to(device=device)
             label = label.to(device=device)
 
-            output = fcn_model.forward(input)
+            output = fcn_model(input)
 
             losses.append(criterion(output, label).item())
             accuracy.append(util.pixel_acc(output, label))
-            mean_iou_scores.append(util.iou(output, label, n_classes=n_class))
+            batch_intersection, batch_union = util.iou(output, label)
+            intersection += batch_intersection
+            union += batch_union
 
-    '''print(f"Loss at epoch: {epoch} is {np.mean(losses)}")
-    print(f"IoU at epoch: {epoch} is {np.mean(mean_iou_scores)}")
-    print(f"Pixel acc at epoch: {epoch} is {np.mean(accuracy)}")'''
+    mean_iou_scores = intersection / union
     print('Val:\t[%d/%d][1/1]\tLoss: %.4f\tIOU: %.4f\tAcc: %.4f'
           % (epoch, epochs, np.mean(losses), np.mean(mean_iou_scores), np.mean(accuracy)))
 
     fcn_model.train()  # TURNING THE TRAIN MODE BACK ON TO ENABLE BATCHNORM/DROPOUT!!
 
-    return np.mean(mean_iou_scores)
+    return np.mean(losses), np.mean(mean_iou_scores), np.mean(accuracy)
 
 
 def modelTest():
     fcn_model.eval()  # Put in eval mode (disables batchnorm/dropout) !
 
     losses = []
-    mean_iou_scores = []
     accuracy = []
+    intersection = np.zeros(n_class)
+    union = np.zeros(n_class)
 
     with torch.no_grad():  # we don't need to calculate the gradient in the validation/testing
 
-        for iter, (input, label) in enumerate(test_loader):
+        for iter, (input, label) in enumerate(val_loader):
             input = input.to(device=device)
             label = label.to(device=device)
 
-            output = fcn_model.forward(input)
+            output = fcn_model(input)
 
-            losses.append(criterion(output, label.long()).item())
+            losses.append(criterion(output, label).item())
             accuracy.append(util.pixel_acc(output, label))
-            mean_iou_scores.append(util.iou(output, label, n_classes=n_class))
+            batch_intersection, batch_union = util.iou(output, label)
+            intersection += batch_intersection
+            union += batch_union
 
-    '''print(f"Loss is {np.mean(losses)}")
-    print(f"IoU is {np.mean(mean_iou_scores)}")
-    print(f"Pixel acc is {np.mean(accuracy)}")'''
-    print('Test:\t[1/1][1/1]\tLoss: %.4f\tIOU: %.4f\tAcc: %.4f'
+    mean_iou_scores = intersection / union
+    print('Val:\t[%d/%d][1/1]\tLoss: %.4f\tIOU: %.4f\tAcc: %.4f'
           % (np.mean(losses), np.mean(mean_iou_scores), np.mean(accuracy)))
 
     fcn_model.train()  # TURNING THE TRAIN MODE BACK ON TO ENABLE BATCHNORM/DROPOUT!!
