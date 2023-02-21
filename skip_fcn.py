@@ -3,29 +3,27 @@ import torch.nn as nn
 
 
 class Conv(nn.Module):
-    def __init__(self, in_dim=None, out_dim=None, kernel_size=1, stride=1, padding=0, output_padding=0):
-
+    def __init__(self, in_dim=None, out_dim=None, kernel_size=1, stride=1, padding=0):
         super().__init__()
         
-        self.sequence = nn.Sequential([
-            nn.Conv2d(in_dim, out_dim, kernel_size, stride, padding, output_padding),
+        self.sequence = nn.Sequential(
+            nn.Conv2d(in_dim, out_dim, kernel_size=kernel_size, stride=stride, padding=padding),
             nn.ReLU(inplace=True),
             nn.BatchNorm2d(out_dim)
-            ])
+            )
 
     def forward(self, x):
         return self.sequence(x)
 
 class deConv(nn.Module):
     def __init__(self, in_dim=None, out_dim=None, kernel_size=1, stride=1, padding=0, output_padding=0):
-        
         super().__init__()
         
-        self.sequence = nn.Sequential([
-            nn.ConvTranspose2d(in_dim, out_dim, kernel_size, stride, padding, output_padding),
+        self.sequence = nn.Sequential(
+            nn.ConvTranspose2d(in_dim, out_dim, kernel_size=kernel_size, stride=stride, padding=padding, output_padding=output_padding),
             nn.ReLU(inplace=True),
             nn.BatchNorm2d(out_dim)
-            ])
+            )
 
     def forward(self, x):
         return self.sequence(x)

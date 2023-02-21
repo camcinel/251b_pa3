@@ -1,5 +1,6 @@
-# from basic_fcn import *
-from fcn_4b import *
+from basic_fcn import FCN
+from skip_fcn import skipFCN
+from fcn_4b import modFCN
 import time
 from torch.utils.data import DataLoader
 import torch
@@ -30,17 +31,6 @@ def getClassWeights(dataset, n_classes=21, device='cpu'):
     n_sample = torch.zeros(n_classes).to(device=device)
     total_samples = torch.zeros(1).to(device=device)
     for _, label in dataset:
-        # print(torch.unique(label))
-        # img_arr = input.clone().cpu().numpy()
-        # img_arr = np.transpose(img_arr, (1,2,0))
-        # label_arr = label.clone().cpu().numpy()
-        # fig, (ax1, ax2) = plt.subplots(1,2)
-        # ax1.imshow(img_arr)
-        # ax2.imshow(label_arr)
-        # plt.show()
-        # print(np.unique(label_arr))
-        # print(torch.unique(label))
-        # print(torch.bincount(torch.flatten(label.to(device=device)), minlength=n_classes).shape)
         n_sample += torch.bincount(torch.flatten(label.to(device=device)), minlength=n_classes)
         total_samples += torch.numel(label.to(device=device))
     return total_samples / n_sample
@@ -76,7 +66,11 @@ if torch.cuda.is_available():
 else:
     device = 'cpu'
 
-fcn_model = FCN(n_class=n_class).to(device=device)
+
+# Select from available models
+models = [FCN, modFCN, skipFCN]
+model = models[2]
+fcn_model = model(n_class=n_class).to(device=device)
 fcn_model.apply(init_weights)
 
 optimizer = torch.optim.AdamW(fcn_model.parameters(), lr=learning_rate, weight_decay=L2)  # TODO choose an optimizer
