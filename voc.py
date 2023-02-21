@@ -76,11 +76,6 @@ class VOC(data.Dataset):
         img = Image.open(img_path).convert('RGB').resize((self.width, self.height))
         mask = Image.open(mask_path).resize((self.width, self.height))
 
-        if self.transform is not None:
-            img = self.transform(img)
-        if self.target_transform is not None:
-            mask = self.target_transform(mask)
-
         # randomly crop
         if self.random_crop:
             i, j, h, w = RandomCrop.get_params(
@@ -101,7 +96,12 @@ class VOC(data.Dataset):
         if self.rotate:
             theta = 360. * random.random()
             img = TF.rotate(img, theta, fill=0)
-            mask = TF.rotate(mask.unsqueeze(0), theta, fill=0).squeeze(0)
+            mask = TF.rotate(mask, theta, fill=0)
+
+        if self.transform is not None:
+            img = self.transform(img)
+        if self.target_transform is not None:
+            mask = self.target_transform(mask)
 
         mask[mask == ignore_label] = 0
 
