@@ -26,7 +26,6 @@ palette = [0, 0, 0, 128, 0, 0, 0, 128, 0, 128, 128, 0, 0, 0, 128, 128, 0, 128, 0
 
 # class 1 and so on......
 
-
 def make_dataset(mode):
     assert mode in ['train', 'val', 'test']
     items = []
@@ -44,13 +43,19 @@ def make_dataset(mode):
 
 class VOC(Dataset):
     # def __init__(self, mode, transform=None, target_transform=None):
-    def __init__(self, mode, input_transform=None):
+    def __init__(self, mode, input_transform=None, target_transform=None):
         self.imgs = make_dataset(mode)
         if len(self.imgs) == 0:
             raise RuntimeError('Found 0 images, please check the data set')
         self.mode = mode
         self.input_transform = input_transform
-        #self.original_transform = original_transform
+        self.target_transform = target_transform
+        self.rand_transform = T.Compose([
+                        T.RandomCrop(size=(224,224)),
+                        T.RandomHorizontalFlip(0.5),
+                        T.RandomVerticalFlip(0.2),
+                        T.RandomRotation(20)
+                        ])
         
         self.width = 224
         self.height = 224
@@ -63,18 +68,21 @@ class VOC(Dataset):
         img = Image.open(img_path).convert('RGB').resize((self.width, self.height))
         mask = Image.open(mask_path).resize((self.width, self.height))
 
-        # tr = random.choice(self.input_transform)
-        seed = np.random.randint(2147483647) # make a seed with numpy generator 
-        random.seed(seed)
-        
+        if self.mode == 'train':    # Augment training datasets
+            seed = np.random.randint(2147483647) # make a seed with numpy generator 
+            torch.manual_seed(seed)
+            img = self.rand_transform(img)
+            torch.manual_seed(seed)
+            mask = self.rand_transform(mask)
+
         if self.input_transform is not None:
-            torch.manual_seed(seed)
-            img_0 = self.input_transform(img)
-            torch.manual_seed(seed)
-            mask_0 = self.input_transform(mask)
-            
-        return img_0, mask_0.squeeze().long()
-        # return img, mask.squeeze().long()
+            img = self.input_transform(img)
+        if self.target_transform is not None:
+            mask = self.target_transform(mask)
+
+        mask[mask == ignore_label] = 0      # Remove boundary (255 white pixels) from bincount
+
+        return img, mask
 
 
     def __len__(self):

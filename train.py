@@ -29,51 +29,47 @@ def init_weights(m):
 def getClassWeights(dataset, n_classes=21, device='cpu'):
     n_sample = torch.zeros(n_classes).to(device=device)
     total_samples = torch.zeros(1).to(device=device)
-    for input, label in dataset:
-        # print((torch.flatten(label.to(device=device))).to(torch.int))
+    for _, label in dataset:
+        # print(torch.unique(label))
+        # img_arr = input.clone().cpu().numpy()
+        # img_arr = np.transpose(img_arr, (1,2,0))
+        # label_arr = label.clone().cpu().numpy()
+        # fig, (ax1, ax2) = plt.subplots(1,2)
+        # ax1.imshow(img_arr)
+        # ax2.imshow(label_arr)
+        # plt.show()
+        # print(np.unique(label_arr))
+        # print(torch.unique(label))
+        # print(torch.bincount(torch.flatten(label.to(device=device)), minlength=n_classes).shape)
         n_sample += torch.bincount(torch.flatten(label.to(device=device)), minlength=n_classes)
         total_samples += torch.numel(label.to(device=device))
     return total_samples / n_sample
 
 
 mean_std = ([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-normalize = standard_transforms.Normalize(*mean_std)
-normalize_input = standard_transforms.Lambda(lambda x: normalize(x) if x.shape[0] == 3 else x)
-# to_tensor = standard_transforms.Lambda(lambda x: standard_transforms.ToTensor(x) if x.shape[0] == 3 else MaskToTensor(x))
-input_composed = standard_transforms.Compose([
-              standard_transforms.RandomCrop(size=(224,224)),
-              standard_transforms.RandomHorizontalFlip(0.5),
-              standard_transforms.RandomVerticalFlip(0.5),
-              standard_transforms.RandomRotation(45),
-              standard_transforms.ToTensor()
-])
 
-input_transform = standard_transforms.Compose([input_composed, normalize_input])
-#original_transform = standard_transforms.Compose([standard_transforms.ToTensor(), normalize_input])
-# input_transform = standard_transforms.Compose([ 
-#                     standard_transforms.ToTensor(), 
-#                     standard_transforms.Normalize(*mean_std)
-#                   ])
-# target_transform = MaskToTensor()
 
-# train_dataset = VOC('train', transform=input_transform, target_transform=target_transform)
-# val_dataset = VOC('val', transform=input_transform, target_transform=target_transform)
-# test_dataset = VOC('test', transform=input_transform, target_transform=target_transform)
-train_dataset = VOC('train', input_transform)
-val_dataset = VOC('val', input_transform)
-test_dataset = VOC('test', input_transform)
-# train_dataset = VOC('train')
-# val_dataset = VOC('val')
-# test_dataset = VOC('test')
+input_transform = standard_transforms.Compose([
+        standard_transforms.ToTensor(), 
+        standard_transforms.Normalize(*mean_std)
+    ])
+target_transform = MaskToTensor()
+
+train_dataset = VOC('train', input_transform=input_transform, target_transform=target_transform)
+val_dataset = VOC('val', input_transform=input_transform, target_transform=target_transform)
+test_dataset = VOC('test', input_transform=input_transform, target_transform=target_transform)
+
 
 train_loader = DataLoader(dataset=train_dataset, batch_size=16, shuffle=True)
 val_loader = DataLoader(dataset=val_dataset, batch_size=16, shuffle=False)
 test_loader = DataLoader(dataset=test_dataset, batch_size=16, shuffle=False)
 
+
 epochs = 100
 learning_rate = 0.0005
 n_class = 21
 patience = 25
+L2 = 0.01
 
 if torch.cuda.is_available():
     device = 'cuda'  # determine which device to use (cuda or cpu)
@@ -83,7 +79,7 @@ else:
 fcn_model = FCN(n_class=n_class).to(device=device)
 fcn_model.apply(init_weights)
 
-optimizer = torch.optim.Adam(fcn_model.parameters(), lr=learning_rate)  # TODO choose an optimizer
+optimizer = torch.optim.AdamW(fcn_model.parameters(), lr=learning_rate, weight_decay=L2)  # TODO choose an optimizer
 scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, epochs)
 criterion = torch.nn.CrossEntropyLoss(weight=getClassWeights(train_dataset, n_classes=n_class, device=device),
                                       reduction='mean')  # TODO Choose an appropriate loss function from https://pytorch.org/docs/stable/_modules/torch/nn/modules/loss.html
@@ -112,15 +108,15 @@ def train(give_time=False):
             # both inputs and labels have to reside in the same device as the model's
             inputs = inputs.to(device=device)  # TODO transfer the input to the same device as the model's
             labels = labels.to(device=device)  # TODO transfer the labels to the same device as the model's
-            # img_arr = inputs.clone().cpu()[0].numpy().T
-            # plt.imshow(img_arr)
-            # plt.show()
             
-            # label_arr = labels.clone().cpu()[0].numpy().T
-            # plt.imshow(label_arr)
+            # Plot random transformaed dimage and mask
+            # img_arr = inputs[0].clone().cpu().numpy()
+            # img_arr = np.transpose(img_arr, (1,2,0))
+            # label_arr = labels[0].clone().cpu().numpy()
+            # fig, (ax1, ax2) = plt.subplots(1,2)
+            # ax1.imshow(img_arr)
+            # ax2.imshow(label_arr)
             # plt.show()
-            #plt.imshow(inputs.clone().cpu()[0].T)
-            #print(inputs.clone()[0])
             # break
             outputs = fcn_model(inputs)  # TODO  Compute outputs. we will not need to transfer the output, it will be automatically in the same device as the model's!
             # print(outputs, labels)
@@ -239,9 +235,9 @@ if __name__ == "__main__":
     print('Format:\t[epoch/total epochs][mini batch/total batches]\tLoss\tIOU\tAccuracy')
 
     # val(-1)  # show the accuracy before training
-    fcn_model, best_epoch, train_loss, train_iou, train_acc, val_loss, val_iou, val_acc = train(give_time=25)
+    fcn_model, best_epoch, train_loss, train_iou, train_acc, val_loss, val_iou, val_acc = train(give_time=1)
     modelTest()
-
+    print(learning_rate, L2)
     make_plots(train_loss, train_iou, train_acc, val_loss, val_iou, val_acc, best_epoch)
     images.make_images(fcn_model,
                        val_dataset,
