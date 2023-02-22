@@ -1,5 +1,5 @@
 import torch.nn as nn
-
+import torch
 
 
 class Conv(nn.Module):
@@ -81,12 +81,8 @@ class FCN8(nn.Module):
         self.conv11 = Conv(64, self.n_class)
 
         # Deconvolution layers
-        self.deconv = deConv(self.n_class, self.n_class)     #(n_class,14,14)
-        # self.deconv2 = deConv(self.n_class, self.n_class)     #(n_class,28,28)
-        # self.deconv3 = deConv(self.n_class, self.n_class)     #(n_class,56,56)
-        # self.deconv4 = deConv(self.n_class, self.n_class)     #(n_class,112,112)
-        # self.deconv5 = deConv(self.n_class, self.n_class)     #(n_class,224,224)
-
+        self.deconv_2n = deConv(2*self.n_class, self.n_class)
+        self.deconv_n = deConv(self.n_class, self.n_class)
 
 
     def forward(self, x):
@@ -98,10 +94,10 @@ class FCN8(nn.Module):
         out6 = self.conv6(self.mpool(out5))                #(4096,7,7)
         out7 = self.conv7(out6)                            #(n_class,7,7)
 
-        out8 = self.deconv(out7)                                      #(n_class,14,14)
-        out9 = self.deconv(out8 + self.conv8(self.mpool(out4)))       #(n_class,28,28)
-        out10 = self.deconv(out9 + self.conv9(self.mpool(out3)))      #(n_class,56,56)
-        out11 = self.deconv(out10 + self.conv10(self.mpool(out2)))    #(n_class,112,112)
-        y = self.deconv(out11 + self.conv11(self.mpool(out1)))    #(n_class,224,224)
+        out8 = self.deconv_n(out7)                                                          #(n_class,14,14)
+        out9 = self.deconv_2n(torch.cat((out8, self.conv8(self.mpool(out4))), dim=1))   #(n_class,28,28)
+        out10 = self.deconv_2n(torch.cat((out9, self.conv9(self.mpool(out3))), dim=1))   #(n_class,56,56)
+        out11 = self.deconv_2n(torch.cat((out10, self.conv10(self.mpool(out2))), dim=1)) #(n_class,112,112)
+        y = self.deconv_2n(torch.cat((out11, self.conv11(self.mpool(out1))), dim=1))  #(n_class,224,224)
 
         return y  # size=(N, n_class, H, W)

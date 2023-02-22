@@ -57,10 +57,10 @@ test_loader = DataLoader(dataset=test_dataset, batch_size=16, shuffle=False)
 
 
 epochs = 100
-learning_rate = 0.001
+learning_rate = 5e-3
 n_class = 21
-patience = 25
-L2 = 0.0001
+patience = 15
+L2 = 0
 
 # determine which device to use (cuda or cpu)
 device  = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -74,7 +74,7 @@ models = {
     'skipFCN': skipFCN, 
     'UNet': UNet
     }
-model = models['UNet']
+model = models['FCN8']
 fcn_model = model(n_class=n_class).to(device=device)
 fcn_model.apply(init_weights)
 
@@ -206,7 +206,7 @@ def modelTest():
 
     with torch.no_grad():  # we don't need to calculate the gradient in the validation/testing
 
-        for iter, (input, label) in enumerate(val_loader):
+        for iter, (input, label) in enumerate(test_loader):
             input = input.to(device=device)
             label = label.to(device=device)
 
