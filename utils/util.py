@@ -34,41 +34,18 @@ def load_config(path):
     """
     return yaml.load(open(path, 'r'), Loader=yaml.SafeLoader)
 
-def iou(pred, target, n_classes=21):
-    ious = []
-    pred_class = torch.argmax(pred, dim=1)
-    target[target == 255] = 0
-    present_classes_per_mask = [torch.unique(mask) for mask in target]
-    for index, class_indices in enumerate(present_classes_per_mask):
-        iou_per_class = []
-        for class_index in class_indices:
-            pred_correct = torch.eq(pred_class[index], class_index)
-            target_correct = torch.eq(target[index], class_index)
-            intersection = (pred_correct & target_correct).sum().item()
-            union = (pred_correct | target_correct).sum().item()
-            iou_per_class.append(intersection / union)
-        ious.append(np.mean(iou_per_class))
-    return np.mean(ious)
 
-    """
-    Old implementation:
-    
+def iou(pred, target, n_classes=21):
+    intersections = []
+    unions = []
     pred_class = torch.argmax(pred, dim=1)
     target[target == 255] = 0
-    for index in range(pred.size(0)):
-        ious_inst = []
-        pred_class_inst = pred_class[index]
-        target_inst = target[index]
-        for i in range(n_classes):
-            pred_class_positive = (pred_class_inst == i)  # torch.from_numpy(pred_class == i).to(device=device)
-            target_positive = (target_inst == i)  # torch.from_numpy(target == i).to(device=device)
-            if torch.any(target_positive):
-                cap = torch.sum(pred_class_positive * target_positive)
-                cup = torch.sum(pred_class_positive + target_positive)
-                ious_inst.append(cap.item() / cup.item())
-        ious.append(np.mean(ious_inst))
-    return np.mean(ious)
-    """
+    for index in range(n_classes):
+        pred_index = torch.eq(pred_class, index)
+        target_index = torch.eq(target, index)
+        intersections.append((pred_index & target_index).sum().item())
+        unions.append((pred_index | target_index).sum().item())
+    return np.array(intersections), np.array(unions)
 
 
 def pixel_acc(pred, target):

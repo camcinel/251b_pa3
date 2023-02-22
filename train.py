@@ -1,6 +1,8 @@
 from models.basic_fcn import FCN
 from models.skip_fcn import skipFCN
 from models.fcn_4b import modFCN
+from models.fcn8 import FCN8
+# from models import *
 from models.unet import UNet
 from voc import VOC
 import time
@@ -55,10 +57,10 @@ test_loader = DataLoader(dataset=test_dataset, batch_size=16, shuffle=False)
 
 
 epochs = 100
-learning_rate = 0.0005
+learning_rate = 0.001
 n_class = 21
 patience = 25
-L2 = 0.01
+L2 = 0.0001
 
 # determine which device to use (cuda or cpu)
 device  = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -66,12 +68,13 @@ device  = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 # Select from available models
 models = {
+    'FCN8': FCN8,
     'FCN': FCN, 
     'modFCN': modFCN, 
     'skipFCN': skipFCN, 
     'UNet': UNet
     }
-model = models['skipFCN']
+model = models['UNet']
 fcn_model = model(n_class=n_class).to(device=device)
 fcn_model.apply(init_weights)
 
@@ -95,8 +98,9 @@ def train(give_time=False):
     for epoch in range(epochs):
         ts = time.time()
         epoch_loss = []
-        epoch_iou = []
         epoch_acc = []
+        intersection = np.zeros(n_class)
+        union = np.zeros(n_class)
         for iter, (inputs, labels) in enumerate(train_loader):
             # TODO  reset optimizer gradients
             optimizer.zero_grad()
@@ -105,15 +109,16 @@ def train(give_time=False):
             inputs = inputs.to(device=device)  # TODO transfer the input to the same device as the model's
             labels = labels.to(device=device)  # TODO transfer the labels to the same device as the model's
             
-            plotImageMask(inputs[0].clone().cpu().numpy(), labels[0].clone().cpu().numpy())
+            # plotImageMask(inputs[0].clone().cpu().numpy(), labels[0].clone().cpu().numpy())
 
             outputs = fcn_model(inputs)  # TODO  Compute outputs. we will not need to transfer the output, it will be automatically in the same device as the model's!
             # print(outputs, labels)
             loss = criterion(outputs, labels)  # TODO  calculate loss
-            iou_ = iou(outputs, labels.clone().detach())
+            batch_intersection, batch_union = iou(outputs, labels.clone().detach())
+            intersection += batch_intersection
+            union += batch_union
             acc = pixel_acc(outputs, labels.clone().detach())
             epoch_loss.append(loss.item())
-            epoch_iou.append(iou_)
             epoch_acc.append(acc)
 
             # TODO  backpropagate
@@ -130,8 +135,11 @@ def train(give_time=False):
             print("Finish epoch %d\tTime elapsed %.4f seconds" % (epoch, time.time() - ts))
 
         current_loss, current_miou_score, current_acc = val(epoch)
+
+        train_mean_iou = intersection / union
+
         train_loss.append(np.mean(epoch_loss))
-        train_iou.append(np.mean(epoch_iou))
+        train_iou.append(np.mean(train_mean_iou))
         train_acc.append(np.mean(epoch_acc))
         val_loss.append(current_loss)
         val_iou.append(current_miou_score)
@@ -160,8 +168,9 @@ def val(epoch):
     fcn_model.eval()  # Put in eval mode (disables batchnorm/dropout) !
 
     losses = []
-    mean_iou_scores = []
     accuracy = []
+    intersection = np.zeros(n_class)
+    union = np.zeros(n_class)
 
     with torch.no_grad():  # we don't need to calculate the gradient in the validation/testing
 
@@ -169,15 +178,15 @@ def val(epoch):
             input = input.to(device=device)
             label = label.to(device=device)
 
-            output = fcn_model.forward(input)
+            output = fcn_model(input)
 
             losses.append(criterion(output, label).item())
             accuracy.append(pixel_acc(output, label))
-            mean_iou_scores.append(iou(output, label, n_classes=n_class))
+            batch_intersection, batch_union = iou(output, label)
+            intersection += batch_intersection
+            union += batch_union
 
-    '''print(f"Loss at epoch: {epoch} is {np.mean(losses)}")
-    print(f"IoU at epoch: {epoch} is {np.mean(mean_iou_scores)}")
-    print(f"Pixel acc at epoch: {epoch} is {np.mean(accuracy)}")'''
+    mean_iou_scores = intersection / union
     print('Val:\t[%d/%d][1/1]\tLoss: %.4f\tIOU: %.4f\tAcc: %.4f'
           % (epoch, epochs, np.mean(losses), np.mean(mean_iou_scores), np.mean(accuracy)))
 
@@ -186,29 +195,31 @@ def val(epoch):
     return np.mean(losses), np.mean(mean_iou_scores), np.mean(accuracy)
 
 
+
 def modelTest():
     fcn_model.eval()  # Put in eval mode (disables batchnorm/dropout) !
 
     losses = []
-    mean_iou_scores = []
     accuracy = []
+    intersection = np.zeros(n_class)
+    union = np.zeros(n_class)
 
     with torch.no_grad():  # we don't need to calculate the gradient in the validation/testing
 
-        for iter, (input, label) in enumerate(test_loader):
+        for iter, (input, label) in enumerate(val_loader):
             input = input.to(device=device)
             label = label.to(device=device)
 
-            output = fcn_model.forward(input)
+            output = fcn_model(input)
 
-            losses.append(criterion(output, label.long()).item())
+            losses.append(criterion(output, label).item())
             accuracy.append(pixel_acc(output, label))
-            mean_iou_scores.append(iou(output, label, n_classes=n_class))
+            batch_intersection, batch_union = iou(output, label)
+            intersection += batch_intersection
+            union += batch_union
 
-    '''print(f"Loss is {np.mean(losses)}")
-    print(f"IoU is {np.mean(mean_iou_scores)}")
-    print(f"Pixel acc is {np.mean(accuracy)}")'''
-    print('Test:\t[1/1][1/1]\tLoss: %.4f\tIOU: %.4f\tAcc: %.4f'
+    mean_iou_scores = intersection / union
+    print('Test:\tLoss: %.4f\tIOU: %.4f\tAcc: %.4f'
           % (np.mean(losses), np.mean(mean_iou_scores), np.mean(accuracy)))
 
     fcn_model.train()  # TURNING THE TRAIN MODE BACK ON TO ENABLE BATCHNORM/DROPOUT!!
