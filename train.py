@@ -189,7 +189,7 @@ def modelTest():
 
     with torch.no_grad():  # we don't need to calculate the gradient in the validation/testing
 
-        for iter, (input, label) in enumerate(val_loader):
+        for iter, (input, label) in enumerate(test_loader):
             input = input.to(device=device)
             label = label.to(device=device)
 

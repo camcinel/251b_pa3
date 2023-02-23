@@ -146,32 +146,6 @@ class GeneralizedDiceLoss(nn.Module):
         return loss
 
 
-class FocalLoss(nn.Module):
-    def __init__(self, weight=None, gamma=2, reduction='mean'):
-        super(FocalLoss, self).__init__()
-        self.alpha = weight
-        self.gamma = gamma
-        self.reduction = reduction
-
-    def forward(self, input, target):
-        cross_entropy_loss = nn.functional.cross_entropy(input, target, reduction='none')
-        pt = torch.exp(-cross_entropy_loss)
-        loss = (1 - pt).pow(self.gamma) * cross_entropy_loss
-
-        if self.alpha is not None:
-            alpha = self.alpha.to(device=target.get_device())
-            alpha.div_(alpha.sum())
-            alpha = alpha[target]
-            loss = alpha * loss
-
-        if self.reduction == 'mean':
-            return loss.mean()
-        elif self.reduction == 'sum':
-            return loss.sum()
-        else:
-            return loss
-
-
 class FocalDiceLoss(nn.Module):
     def __init__(self, n_class, weight=None, smooth=1., gamma=1, reduction='mean'):
         super(FocalDiceLoss, self).__init__()
@@ -216,17 +190,16 @@ class FocalDiceLoss(nn.Module):
             raise NotImplementedError
 
 
-class FocalLoss2(nn.Module):
+class FocalLoss(nn.Module):
     def __init__(self, alpha=None, gamma=0., reduction='mean', ignore_index=-100):
 
-        super(FocalLoss2, self).__init__()
+        super(FocalLoss, self).__init__()
         self.alpha = alpha
         self.gamma = gamma
         self.ignore_index = ignore_index
         self.reduction = reduction
 
-        self.nll_loss = nn.NLLLoss(
-            weight=alpha, reduction='none', ignore_index=ignore_index)
+        self.nll_loss = nn.NLLLoss(weight=alpha, reduction='none', ignore_index=ignore_index)
 
     def forward(self, input, target):
         if input.ndim > 2:
@@ -235,21 +208,15 @@ class FocalLoss2(nn.Module):
             input = input.permute(0, *range(2, input.ndim), 1).reshape(-1, c)
             # (N, d1, d2, ..., dK) --> (N * d1 * ... * dK,)
             target = target.view(-1)
-
-        # compute weighted cross entropy term: -alpha * log(pt)
-        # (alpha is already part of self.nll_loss)
         log_p = nn.functional.log_softmax(input, dim=-1)
         cross_entropy = self.nll_loss(log_p, target)
 
-        # get true class column from each row
-        all_rows = torch.arange(len(input))
-        log_pt = log_p[all_rows, target]
+        rows = torch.arange(len(input))
+        log_pt = log_p[rows, target]
 
-        # compute focal term: (1 - pt)^gamma
         pt = log_pt.exp()
-        focal_term = (1 - pt).pow( self.gamma)
+        focal_term = (1 - pt).pow(self.gamma)
 
-        # the full loss: -alpha * ((1 - pt)^gamma) * log(pt)
         loss = focal_term * cross_entropy
 
         if self.reduction == 'mean':
