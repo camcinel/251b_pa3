@@ -4,4 +4,8 @@
 __pycache__/
 data/
 .DS_Store
+<<<<<<< HEAD
 *.pkl
+=======
+*.pkl
+>>>>>>> 8e9f977... update plots
