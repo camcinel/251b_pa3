@@ -13,7 +13,7 @@ def make_images(model, dataset, palette, index=0, device='cpu'):
     output_image_rgb = palette_tens[torch.argmax(output, dim=1).squeeze().to('cpu')]
 
     fig = plt.figure()
-
+    # img = img[...,::-1]
     fig.add_subplot(1, 3, 1)
     plt.imshow(to_image(input_image_rgb.numpy().astype('uint8')))
     plt.axis('off')
@@ -29,7 +29,8 @@ def make_images(model, dataset, palette, index=0, device='cpu'):
     plt.axis('off')
     plt.title('Ground Truth')
 
-    fig.show()
+    # fig.show()
+    plt.show()
 
 
 def test_image_transforms(dataset, palette, index=0, device='cpu'):

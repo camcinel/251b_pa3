@@ -57,21 +57,15 @@ class FCN8(nn.Module):
 
         self.conv2 = DoubleConv(64, 128)   #(128, 112,112)
 
-        # self.mpool2 = nn.MaxPool2d(2, 2, 0)         #(128,56,56)
-
         self.conv3 = nn.Sequential(DoubleConv(128, 256), Conv(256, 256))    #(256,56,56)
-
-        # self.mpool3 = nn.MaxPool2d(2, 2, 0)          #(256,28,28)
 
         self.conv4 = nn.Sequential(DoubleConv(256, 512), Conv(512, 512))    #(512,28,28)
 
-        # self.mpool4 = nn.MaxPool2d(2, 2, 0)          #(512,14,14)
-
         self.conv5 = nn.Sequential(DoubleConv(512, 512), Conv(512, 512))    #(512,14,14)
-
-        # self.mpool5 = nn.MaxPool2d(2, 2, 0)          #(512,7,7)
+        # self.conv5 = nn.Sequential(DoubleConv(512, 1024), Conv(1024, 2048))    #(2048,14,14)
 
         self.conv6 = DoubleConv(512, 4096)           #(4096,7,7)
+        # self.conv6 = DoubleConv(2048, 4096)           #(4096,7,7)
 
         self.conv7 = Conv(4096, self.n_class)        #(n_class,7,7)
 
@@ -90,7 +84,7 @@ class FCN8(nn.Module):
         out2 = self.conv2(self.mpool(out1))                #(128,112,112)
         out3 = self.conv3(self.mpool(out2))                #(256,56,56)
         out4 = self.conv4(self.mpool(out3))                #(512,28,28)
-        out5 = self.conv5(self.mpool(out4))                #(512,14,14)
+        out5 = self.conv5(self.mpool(out4))                #(2048,14,14)    512
         out6 = self.conv6(self.mpool(out5))                #(4096,7,7)
         out7 = self.conv7(out6)                            #(n_class,7,7)
 

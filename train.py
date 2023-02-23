@@ -14,6 +14,8 @@ from utils.util import *
 import numpy as np
 from copy import deepcopy
 import utils.images as images
+import pickle
+from utils.images import *
 
 
 class MaskToTensor(object):
@@ -57,10 +59,10 @@ test_loader = DataLoader(dataset=test_dataset, batch_size=16, shuffle=False)
 
 
 epochs = 100
-learning_rate = 5e-3
+learning_rate = 1e-3
 n_class = 21
-patience = 15
-L2 = 0
+patience = 25
+L2 = 0.0001
 
 # determine which device to use (cuda or cpu)
 device  = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -74,19 +76,21 @@ models = {
     'skipFCN': skipFCN, 
     'UNet': UNet
     }
-model = models['FCN8']
+key_ = 'FCN8'
+model = models[key_]
 fcn_model = model(n_class=n_class).to(device=device)
 fcn_model.apply(init_weights)
 
 optimizer = torch.optim.AdamW(fcn_model.parameters(), lr=learning_rate, weight_decay=L2)  # TODO choose an optimizer
 scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, epochs)
-criterion = torch.nn.CrossEntropyLoss(weight=getClassWeights(train_dataset, n_classes=n_class, device=device),
-                                      reduction='mean')  # TODO Choose an appropriate loss function from https://pytorch.org/docs/stable/_modules/torch/nn/modules/loss.html
-
+criterion = torch.nn.CrossEntropyLoss(weight=getClassWeights(train_dataset, n_classes=n_class, device=device),reduction='mean')  
+# criterion = torch.nn.CrossEntropyLoss(reduction='mean')  
+# TODO Choose an appropriate loss function from https://pytorch.org/docs/stable/_modules/torch/nn/modules/loss.html
 
 
 def train(give_time=False):
-    best_iou_score = 0.0
+    best_loss = np.inf
+    # best_iou_score = 0.0
     counter = 0
     train_loss = []
     val_loss = []
@@ -146,21 +150,21 @@ def train(give_time=False):
         val_acc.append(current_acc)
         scheduler.step()
 
-        if current_miou_score > best_iou_score:
-            best_iou_score = current_miou_score
+        if current_loss < best_loss:
+            best_loss = current_loss
             best_model = deepcopy(fcn_model)
             best_epoch = epoch
             counter = 0
             # save the best model
-        elif current_miou_score < best_iou_score:
+        elif current_loss > best_loss:
             counter += 1
         if counter == patience:
             print(f'Early stop at epoch {epoch}\tBest epoch: {best_epoch}')
             break
+
         # if epoch == give_time:
-        #   break
-        # best_model = deepcopy(fcn_model)
-        # best_epoch = epoch
+        #     break
+    
     return best_model, best_epoch, train_loss, train_iou, train_acc, val_loss, val_iou, val_acc
 
 
@@ -235,11 +239,11 @@ if __name__ == "__main__":
     print('Format:\t[epoch/total epochs][mini batch/total batches]\tLoss\tIOU\tAccuracy')
 
     # val(-1)  # show the accuracy before training
-    fcn_model, best_epoch, train_loss, train_iou, train_acc, val_loss, val_iou, val_acc = train(give_time=1)
+    fcn_model, best_epoch, train_loss, train_iou, train_acc, val_loss, val_iou, val_acc = train(1)
     modelTest()
     print(learning_rate, L2)
-    make_plots(train_loss, train_iou, train_acc, val_loss, val_iou, val_acc, best_epoch)
-    images.make_images(fcn_model,
+    # make_plots(train_loss, train_iou, train_acc, val_loss, val_iou, val_acc, best_epoch)
+    make_images(fcn_model,
                        val_dataset,
                        palette=[0, 0, 0, 128, 0, 0, 0, 128, 0, 128, 128, 0, 0, 0, 128, 128, 0, 128, 0, 128, 128,
                                 128, 128, 128, 64, 0, 0, 192, 0, 0, 64, 128, 0, 192, 128, 0, 64, 0, 128, 192, 0, 128,
