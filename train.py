@@ -46,7 +46,7 @@ input_transform = standard_transforms.Compose([
 target_transform = MaskToTensor()
 
 train_dataset = voc.VOC('train', transform=input_transform, target_transform=target_transform, random_hor_flip_prob=0.5,
-                        random_vert_flip_prob=0.5)
+                        random_vert_flip_prob=0.5, random_crop=True, rotate=True)
 val_dataset = voc.VOC('val', transform=input_transform, target_transform=target_transform)
 test_dataset = voc.VOC('test', transform=input_transform, target_transform=target_transform)
 
@@ -54,26 +54,10 @@ train_loader = DataLoader(dataset=train_dataset, batch_size=16, shuffle=True)
 val_loader = DataLoader(dataset=val_dataset, batch_size=16, shuffle=False)
 test_loader = DataLoader(dataset=test_dataset, batch_size=16, shuffle=False)
 
-"""epochs = 100
-learning_rate = 0.01
-n_class = 21
-patience = 25"""
-
 if torch.cuda.is_available():
     device = 'cuda'
 else:
     device = 'cpu'
-
-"""fcn_model = UNet(n_class=n_class).to(device=device)
-fcn_model.apply(init_weights)
-
-optimizer = torch.optim.Adam(fcn_model.parameters(), lr=learning_rate)
-scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, epochs)
-criterion = torch.nn.CrossEntropyLoss(weight=getClassWeights(train_dataset, n_classes=n_class, device=device),
-                                      reduction='mean')"""
-
-
-# criterion = torch.nn.CrossEntropyLoss()
 
 
 def train(args):
@@ -244,7 +228,7 @@ def modelTest(model, criterion, n_class=21):
             union += batch_union
 
     mean_iou_scores = intersection / union
-    print('Val:\t[%d/%d][1/1]\tLoss: %.4f\tIOU: %.4f\tAcc: %.4f'
+    print('Test:\t[1/1][1/1]\tLoss: %.4f\tIOU: %.4f\tAcc: %.4f'
           % (np.mean(losses), np.mean(mean_iou_scores), np.mean(accuracy)))
 
     model.train()  # TURNING THE TRAIN MODE BACK ON TO ENABLE BATCHNORM/DROPOUT!!
