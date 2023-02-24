@@ -30,7 +30,7 @@ def make_one_hot(labels, classes):
     return target
 
 
-def make_plots(train_loss, train_iou, train_acc, val_loss, val_iou, val_acc, early_stop):
+def make_plots(train_loss, train_iou, train_acc, val_loss, val_iou, val_acc, early_stop, save_name=None):
     fig = plt.figure(figsize=(60, 90))
     epochs = np.arange(1, len(train_loss) + 1, 1)
 
@@ -66,6 +66,9 @@ def make_plots(train_loss, train_iou, train_acc, val_loss, val_iou, val_acc, ear
     ax3.set_xlabel('Epochs', fontsize=35.0)
     ax3.set_ylabel('Accuracy', fontsize=35.0)
     ax3.legend(loc="lower right", fontsize=35.0)
+
+    if save_name is not None:
+        plt.savefig(f'{save_name}.png')
 
     plt.show()
 
@@ -191,15 +194,14 @@ class FocalDiceLoss(nn.Module):
 
 
 class FocalLoss(nn.Module):
-    def __init__(self, alpha=None, gamma=0., reduction='mean', ignore_index=-100):
+    def __init__(self, alpha=None, gamma=0., reduction='mean'):
 
         super(FocalLoss, self).__init__()
         self.alpha = alpha
         self.gamma = gamma
-        self.ignore_index = ignore_index
         self.reduction = reduction
 
-        self.nll_loss = nn.NLLLoss(weight=alpha, reduction='none', ignore_index=ignore_index)
+        self.nll_loss = nn.NLLLoss(weight=alpha, reduction='none')
 
     def forward(self, input, target):
         if input.ndim > 2:

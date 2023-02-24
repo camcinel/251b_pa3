@@ -24,7 +24,7 @@ class Resnet(nn.Module):
         self.classifier = nn.Conv2d(32, self.n_class, kernel_size=1)
 
         # choose resnet34 or resnet18
-        resnet_mod = torchvision.models.resnet18(weights=torchvision.models.ResNet34_Weights.IMAGENET1K_V1)
+        resnet_mod = torchvision.models.resnet34(weights=torchvision.models.ResNet34_Weights.IMAGENET1K_V1)
 
         # remove the last two layers so it fits in our decoder framework
         self.newmodel = torch.nn.Sequential(*(list(resnet_mod.children())[:-2]))

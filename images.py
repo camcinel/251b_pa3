@@ -3,7 +3,7 @@ import torch
 import torchvision.transforms as transforms
 
 
-def make_images(model, dataset, palette, index=0, device='cpu'):
+def make_images(model, dataset, palette, index=0, device='cpu', save_name=None):
     to_image = transforms.ToPILImage()
     palette_tens = torch.tensor(palette).reshape(-1, 3)
     input, truth = dataset[index]
@@ -28,6 +28,9 @@ def make_images(model, dataset, palette, index=0, device='cpu'):
     plt.imshow(to_image(truth_image_rgb.numpy().astype('uint8')))
     plt.axis('off')
     plt.title('Ground Truth')
+
+    if save_name is not None:
+        fig.savefig(f'{save_name}.png')
 
     fig.show()
 

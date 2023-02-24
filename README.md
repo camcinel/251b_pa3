@@ -9,7 +9,7 @@ Currently four different models are implemented:
 1. A simple fully convolution network
 2. A pretrained [ResNet34](https://arxiv.org/abs/1512.03385) encoder with a convolutional decoder
 3. [UNet](https://arxiv.org/abs/1505.04597)
-4. A custom convolutional neural network
+4. A custom convolutional neural network based on [FCN8](https://arxiv.org/abs/1411.4038)
 
 Additionally, the following loss functions are implemented:
 
@@ -33,8 +33,22 @@ python train.py
 
 The following command line arguments are supported:
 
-- `give-time`: will give the time elapsed for each epoch of training.
-The default is not to give time.
+- `--time`: will give the time elapsed for each epoch of training. The default is not to give time.
+- `--batch-size`: determines the number of images in each batch. Default is 16.
+- `--epochs`: the maximum number of training of epochs. Default is 100.
+- `--learning-rate`: the learning rate during training. Default if 0.005.
+- `--model`: chooses the model to train and test. The choices are
+    1. `baseline`: the baseline model
+    2. `resnet`: a pre-trained ResNet34 encoder and custom decoder
+    3. `unet`: an implementation of UNet
+    4. `fc8`: a custom convolutional network based on FCN8
+- `--weighted`: weight loss function by inverse class frequency
+- `--loss`: chooses the model's loss function. The choices are
+  1. `cross-entropy`: cross entropy loss
+  2. `focal`: focal loss
+  3. `dice`: dice loss
+- `--patience`: chooses the amount of patience epochs for early stopping. The default is 10
+- `--scheduler`: chooses to use a cosine annealing learning rate scheduler. The default is not to use cosine annealing.
 
 ## Required Libraries
 
@@ -56,4 +70,5 @@ The module is broken up into the following files:
 - `basic_fcn.py`: contains the constructor for the simple fully convolutional network
 - `resnet.py`: contains the constructor for the pretrained ResNet34
 - `unet.py`: contains the constructor for UNet
-- `train.py`: main file, runnings the training loop
+- `fc8.py`: contains the constructor for custom network based on FCN8
+- `train.py`: main file, runs the training loop
