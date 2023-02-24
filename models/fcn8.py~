@@ -107,6 +107,11 @@ class FCN8(nn.Module):
         out10 = self.deconv_2n(torch.cat((out9, self.conv9(self.mpool(out3))), dim=1))   #(n_class,56,56)
         out11 = self.deconv_2n(torch.cat((out10, self.conv10(self.mpool(out2))), dim=1)) #(n_class,112,112)
         
+        # out8 = self.deconv_n(out7)                                                          #(n_class,7,7)
+        # out9 = self.deconv_n((out8 + self.conv8(self.mpool(out4)))/2)   #(n_class,28,28)
+        # out10 = self.deconv_n((out9 + self.conv9(self.mpool(out3)))/2)   #(n_class,56,56)
+        # out11 = self.deconv_n((out10 + self.conv10(self.mpool(out2)))/2) #(n_class,112,112)
+
         y = self.classifier(torch.cat((out11, self.conv11(self.mpool(out1))), dim=1))  #(n_class,224,224)
 
         return y  # size=(N, n_class, H, W)
